@@ -21,7 +21,8 @@
         body { font-family: system-ui, -apple-system, sans-serif; background-color: #0f172a; color: white; margin: 0; touch-action: manipulation; }
         .loader { border: 4px solid #1e293b; border-top: 4px solid #3b82f6; border-radius: 50%; width: 50px; height: 50px; animation: spin 1s linear infinite; }
         @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
-        .glass { background: rgba(255, 255, 255, 0.03); backdrop-filter: blur(10px); border: 1px solid rgba(255, 255, 255, 0.05); }
+        .glass-panel { background: rgba(30, 41, 59, 0.7); backdrop-filter: blur(10px); border: 1px solid rgba(255, 255, 255, 0.05); }
+        input, select { color: black !important; }
     </style>
 </head>
 <body>
@@ -63,14 +64,18 @@
           const [pin, setPin] = useState('');
           const [settings, setSettings] = useState({ laser: '941997', office: '0128', vaultPin: '3316', meterPrice: 250, commissionRate: 1 });
 
+          // البيانات
           const [items, setItems] = useState([]);
           const [orders, setOrders] = useState([]);
           const [employees, setEmployees] = useState([]);
           const [expenses, setExpenses] = useState([]);
+          const [customers, setCustomers] = useState([]);
+          const [laserBills, setLaserBills] = useState([]);
+          const [debtPayments, setDebtPayments] = useState([]);
 
           useEffect(() => {
             auth.signInAnonymously().catch(err => {
-                setError(`خطأ في الاتصال: (${err.code}). الحل: ضيف الدومين bolaemad524-ux.github.io في Authorized Domains بـ Firebase.`);
+                setError(`عطل أمان: لازم تضيف bolaemad524-ux.github.io في صفحة Authorized Domains في إعدادات Firebase.`);
                 setLoading(false);
             });
             auth.onAuthStateChanged(u => { setUser(u); if(u) setLoading(false); });
@@ -79,12 +84,16 @@
           useEffect(() => {
             if (!user) return;
             const rootRef = db.collection('artifacts').doc(appNamespace).collection('public').doc('data');
+
             const unsub = [
                 rootRef.collection('app_settings').doc('general').onSnapshot(s => s.exists && setSettings(prev => ({...prev, ...s.data()}))),
                 rootRef.collection('inventory').onSnapshot(s => setItems(s.docs.map(d=>({id:d.id, ...d.data()})))),
-                rootRef.collection('orders').orderBy('createdAt', 'desc').limit(50).onSnapshot(s => setOrders(s.docs.map(d=>({id:d.id, ...d.data()})))),
+                rootRef.collection('orders').orderBy('createdAt', 'desc').limit(100).onSnapshot(s => setOrders(s.docs.map(d=>({id:d.id, ...d.data()})))),
                 rootRef.collection('employees').onSnapshot(s => setEmployees(s.docs.map(d=>({id:d.id, ...d.data()})))),
                 rootRef.collection('expenses').onSnapshot(s => setExpenses(s.docs.map(d=>({id:d.id, ...d.data()})))),
+                rootRef.collection('wholesale_customers').onSnapshot(s => setCustomers(s.docs.map(d=>({id:d.id, ...d.data()})))),
+                rootRef.collection('laser_bills').orderBy('createdAt', 'desc').onSnapshot(s => setLaserBills(s.docs.map(d=>({id:d.id, ...d.data()})))),
+                rootRef.collection('debt_payments').onSnapshot(s => setDebtPayments(s.docs.map(d=>({id:d.id, ...d.data()})))),
             ];
             return () => unsub.forEach(fn => fn());
           }, [user]);
@@ -92,16 +101,16 @@
           if (error) return (
             <div className="min-h-screen flex flex-col items-center justify-center p-6 text-center bg-slate-900">
                 <div className="bg-red-500/10 p-8 rounded-3xl border border-red-500/50 max-w-md">
-                    <Icon name="alert-triangle" size={48} className="text-red-500 mx-auto mb-4"/>
-                    <h2 className="text-xl font-bold text-white mb-2">تنبيه من النظام</h2>
-                    <p className="text-slate-300 text-sm mb-6">{error}</p>
-                    <button onClick={()=>window.location.reload()} className="bg-red-600 text-white px-8 py-3 rounded-xl font-bold">تحديث الصفحة</button>
+                    <Icon name="shield-alert" size={64} className="text-red-500 mx-auto mb-6"/>
+                    <h2 className="text-2xl font-black text-white mb-2">تنبيه من النظام</h2>
+                    <p className="text-slate-300 text-sm mb-8 leading-relaxed">{error}</p>
+                    <button onClick={()=>window.location.reload()} className="bg-red-600 text-white px-8 py-3 rounded-xl font-bold">إعادة المحاولة</button>
                 </div>
             </div>
           );
 
           if (loading) return (
-            <div className="min-h-screen bg-slate-900 flex flex-col items-center justify-center gap-4 text-slate-400 font-bold">
+            <div className="min-h-screen bg-slate-900 flex flex-col items-center justify-center gap-4 text-slate-400 font-bold italic">
                 <div className="loader"></div>جاري تحميل بيانات استوديو بولا...
             </div>
           );
@@ -117,86 +126,252 @@
               <div className="min-h-screen flex flex-col items-center justify-center p-6 bg-slate-900" dir="rtl">
                 {authMode && (
                     <div className="fixed inset-0 bg-black/90 z-50 flex items-center justify-center p-4">
-                        <div className="bg-white rounded-3xl p-10 max-w-sm w-full text-center text-slate-900 shadow-2xl">
+                        <div className="bg-white rounded-[2rem] p-10 max-w-sm w-full text-center text-slate-900 shadow-2xl">
                             <button onClick={() => setAuthMode(null)} className="absolute top-4 left-4 text-slate-300"><Icon name="x"/></button>
-                            <div className="w-16 h-16 bg-blue-50 rounded-full flex items-center justify-center mx-auto mb-4 text-blue-600"><Icon name="lock" size={28}/></div>
-                            <h3 className="text-xl font-black mb-6">{authMode === 'laser' ? 'دخول الليزر' : 'دخول المكتب'}</h3>
-                            <input type="password" autoFocus className="w-full bg-slate-100 p-4 text-center text-4xl font-black rounded-2xl mb-6 outline-none border-2 border-transparent focus:border-blue-500" value={pin} onChange={e => setPin(e.target.value)} placeholder="****" onKeyDown={e => e.key === 'Enter' && handleLogin()}/>
-                            <button onClick={handleLogin} className="w-full bg-blue-600 text-white py-4 rounded-xl font-black shadow-lg">دخول</button>
+                            <div className="w-20 h-20 bg-blue-50 rounded-full flex items-center justify-center mx-auto mb-6 text-blue-600 shadow-inner"><Icon name="lock" size={32}/></div>
+                            <h3 className="text-2xl font-black mb-6 uppercase tracking-widest">{authMode === 'laser' ? 'الليزر' : 'المكتب'}</h3>
+                            <input type="password" autoFocus className="w-full bg-slate-100 p-5 text-center text-5xl font-black rounded-3xl mb-6 outline-none border-2 border-transparent focus:border-blue-500" value={pin} onChange={e => setPin(e.target.value)} placeholder="****" onKeyDown={e => e.key === 'Enter' && handleLogin()}/>
+                            <button onClick={handleLogin} className="w-full bg-blue-600 text-white py-5 rounded-2xl font-black text-xl shadow-lg active:scale-95 transition">دخول</button>
                         </div>
                     </div>
                 )}
-                <h1 className="text-5xl md:text-7xl font-black text-white mb-2 tracking-tighter italic">PAULA SYSTEM</h1>
-                <p className="text-blue-400 font-bold mb-16 tracking-widest text-xs uppercase opacity-70">Premium Studio Edition V23.2</p>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 w-full max-w-3xl">
-                    <button onClick={() => setAuthMode('laser')} className="bg-slate-800 hover:bg-blue-600 p-10 rounded-[2.5rem] border border-slate-700 transition flex flex-col items-center gap-6 group">
-                        <Icon name="zap" size={64} className="text-blue-400 group-hover:text-white transition"/>
-                        <span className="text-2xl font-black text-white">ماكينة الليزر</span>
+                <h1 className="text-6xl md:text-9xl font-black text-white mb-2 tracking-tighter italic select-none">PAULA</h1>
+                <p className="text-blue-400 font-bold mb-20 tracking-[0.4em] text-xs uppercase opacity-80">Studio System V23.2</p>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-8 w-full max-w-4xl px-4">
+                    <button onClick={() => setAuthMode('laser')} className="bg-slate-800 hover:bg-blue-600 p-14 rounded-[3.5rem] border border-slate-700 transition-all duration-500 flex flex-col items-center gap-6 group hover:-translate-y-2">
+                        <Icon name="zap" size={80} className="text-blue-400 group-hover:text-white transition duration-500"/>
+                        <span className="text-3xl font-black text-white">ماكينة الليزر</span>
                     </button>
-                    <button onClick={() => setAuthMode('office')} className="bg-slate-800 hover:bg-emerald-600 p-10 rounded-[2.5rem] border border-slate-700 transition flex flex-col items-center gap-6 group">
-                        <Icon name="package" size={64} className="text-emerald-400 group-hover:text-white transition"/>
-                        <span className="text-2xl font-black text-white">حسابات المكتب</span>
+                    <button onClick={() => setAuthMode('office')} className="bg-slate-800 hover:bg-emerald-600 p-14 rounded-[3.5rem] border border-slate-700 transition-all duration-500 flex flex-col items-center gap-6 group hover:-translate-y-2">
+                        <Icon name="package" size={80} className="text-emerald-400 group-hover:text-white transition duration-500"/>
+                        <span className="text-3xl font-black text-white">حسابات المكتب</span>
                     </button>
                 </div>
               </div>
             );
           }
 
-          return (
-            <div className="min-h-screen bg-slate-50 text-slate-900 p-4 md:p-8" dir="rtl">
-                <div className="flex justify-between items-center bg-white p-4 rounded-3xl shadow-sm border mb-6">
-                    <button onClick={()=>setView('landing')} className="bg-slate-100 p-3 rounded-xl text-red-500 hover:bg-red-500 hover:text-white transition"><Icon name="log-out"/></button>
-                    <h2 className="font-black text-lg">{view === 'office' ? 'نظام المكتب' : 'نظام الليزر'}</h2>
-                    <div className="text-xs font-black bg-emerald-100 text-emerald-700 px-4 py-2 rounded-full flex items-center gap-2"><Icon name="check-circle" size={14}/> متصل أونلاين</div>
-                </div>
+          // واجهة السيستم الكاملة
+          return <StudioUI view={view} setView={setView} dbRef={db.collection('artifacts').doc(appNamespace).collection('public').doc('data')} items={items} orders={orders} settings={settings} employees={employees} customers={customers} expenses={expenses} debtPayments={debtPayments} laserBills={laserBills} />;
+        };
 
-                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                    <div className="lg:col-span-2">
-                        <div className="bg-white p-6 rounded-[2rem] border border-slate-100 shadow-sm">
-                            <h3 className="font-black mb-4 flex items-center gap-2 text-blue-600"><Icon name="package"/> المخزن المتوفر:</h3>
-                            <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-                                {items.map(i => (
-                                    <div key={i.id} className="bg-slate-50 p-6 rounded-3xl border border-slate-100 relative group overflow-hidden hover:border-blue-400 transition">
-                                        <div className="font-black text-slate-800 text-sm mb-1">{i.name}</div>
-                                        <div className="text-emerald-600 font-black text-xl">{i.price} ج</div>
-                                        <div className={`text-[10px] font-bold mt-2 ${i.stock < 5 ? 'text-red-500 animate-pulse' : 'text-slate-400'}`}>المخزون: {i.stock}</div>
-                                        {i.isLaser && <Icon name="zap" size={14} className="absolute top-4 left-4 text-blue-500 opacity-20"/>}
+        const StudioUI = ({ view, setView, dbRef, items, orders, settings, employees, customers, expenses, debtPayments, laserBills }) => {
+            const [tab, setTab] = useState('sales');
+            const [cart, setCart] = useState([]);
+            const [client, setClient] = useState({name: '', phone: ''});
+            const [emp, setEmp] = useState('');
+            const [pay, setPay] = useState({paid: '', disc: '', method: 'cash'});
+            const [isWholesale, setIsWholesale] = useState(false);
+            const [adminLock, setAdminLock] = useState(true);
+            const [pinInput, setPinInput] = useState('');
+            const today = new Date().toLocaleDateString('en-CA');
+
+            const hStats = useMemo(() => {
+                const dO = orders.filter(o => o.dateString === today);
+                const dE = expenses.filter(e => e.dateString === today).reduce((s,e)=>s+(e.amount||0),0);
+                const dD = debtPayments.filter(d => d.dateString === today).reduce((s,d)=>s+(d.amount||0),0);
+                let cash = dD, wallet = 0;
+                dO.forEach(o => { if(o.paymentMethod==='cash') cash += (o.initialPaid||o.paid); else wallet += (o.initialPaid||o.paid); });
+                return { drawer: cash - dE, wallet, total: (cash+wallet) - dE };
+            }, [orders, expenses, debtPayments, today]);
+
+            const laserStats = useMemo(() => {
+                const fOrders = orders.filter(o => o.dateString?.startsWith(today.slice(0, 7)));
+                const fBills = laserBills.filter(b => b.dateString?.startsWith(today.slice(0, 7)));
+                const income = fOrders.reduce((s, o) => s + (o.items || []).filter(i => i.isLaser).reduce((ss, i) => ss + (i.currentPrice * i.qty), 0), 0);
+                const bills = fBills.reduce((s, b) => s + (parseFloat(b.amount)||0), 0);
+                return { income, bills, share: (income - bills) / 2 };
+            }, [orders, laserBills, today]);
+
+            const handleSave = async () => {
+                if(!cart.length || !client.name.trim() || !emp) return alert("البيانات ناقصة يا بولا!");
+                const sub = cart.reduce((a,b)=>a+(b.currentPrice*b.qty),0);
+                const total = sub - (parseFloat(pay.disc)||0);
+                const paid = parseFloat(pay.paid)||0;
+
+                const batch = firebase.firestore().batch();
+                const newRef = dbRef.collection('orders').doc();
+                batch.set(newRef, {
+                    items: cart, subTotal: sub, discount: parseFloat(pay.disc)||0, total, paid, remaining: total-paid, initialPaid: paid,
+                    customerName: client.name, customerPhone: client.phone, employeeName: emp, paymentMethod: pay.method,
+                    dateString: today, monthString: today.slice(0, 7), createdAt: firebase.firestore.FieldValue.serverTimestamp()
+                });
+                cart.forEach(i => { if(!i.isPrinting) batch.update(dbRef.collection('inventory').doc(i.id), {stock: firebase.firestore.FieldValue.increment(-i.qty)}); });
+                await batch.commit();
+                setCart([]); setPay({paid:'', disc:'', method:'cash'}); setClient({name:'', phone:''}); setEmp(''); alert("تم حفظ الفاتورة بنجاح ✅");
+            };
+
+            return (
+                <div className="min-h-screen bg-slate-50 text-slate-900 p-4 md:p-8" dir="rtl">
+                    {/* Header */}
+                    <div className="flex flex-col lg:flex-row justify-between items-center mb-8 bg-white p-6 rounded-[3rem] shadow-sm border border-slate-100 gap-6">
+                        <div className="flex items-center gap-6 w-full lg:w-auto justify-between">
+                            <button onClick={()=>setView('landing')} className="bg-slate-100 p-4 rounded-[1.5rem] text-red-500 hover:bg-red-500 hover:text-white transition shadow-sm active:scale-90"><Icon name="log-out" size={24}/></button>
+                            <div className="flex gap-3">
+                                <div className="px-6 py-3 bg-emerald-50 text-emerald-700 rounded-3xl border border-emerald-100 text-sm font-black text-center shadow-sm">
+                                    <span className="block text-[10px] uppercase opacity-50 tracking-wider">الدرج</span>{hStats.drawer} ج
+                                </div>
+                                <div className="px-6 py-3 bg-blue-50 text-blue-700 rounded-3xl border border-blue-100 text-sm font-black text-center shadow-sm">
+                                    <span className="block text-[10px] uppercase opacity-50 tracking-wider">محفظة</span>{hStats.wallet} ج
+                                </div>
+                            </div>
+                        </div>
+                        <div className="flex gap-2 overflow-x-auto scrollbar-hide w-full lg:w-auto p-1">
+                            {[
+                                {id:'sales', n:'البيع', i:'shopping-cart'}, 
+                                {id:'orders', n:'الطلبات', i:'file-text'}, 
+                                {id:'warehouse', n:'المخزن', i:'box'}, 
+                                {id:'admin', n:'الخزنة', i:'shield-check'}
+                            ].map(t => (
+                                <button key={t.id} onClick={()=>setTab(t.id)} className={`px-8 py-4 rounded-3xl text-sm font-black flex items-center gap-3 transition-all duration-300 ${tab===t.id?'bg-slate-900 text-white shadow-2xl scale-105':'bg-slate-100 text-slate-500 hover:bg-slate-200'}`}>
+                                    <Icon name={t.i} size={18}/> {t.n}
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+
+                    {/* Content */}
+                    {tab === 'sales' && (
+                        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                            <div className="lg:col-span-2">
+                                <div className="flex gap-3 mb-8">
+                                    <button onClick={()=>setIsWholesale(false)} className={`flex-1 py-5 rounded-[2rem] font-black text-lg transition-all duration-300 border-2 ${!isWholesale?'bg-emerald-600 border-emerald-600 text-white shadow-xl scale-[1.02]':'bg-white border-slate-100 text-slate-400'}`}>بيع قطاعي</button>
+                                    <button onClick={()=>setIsWholesale(true)} className={`flex-1 py-5 rounded-[2rem] font-black text-lg transition-all duration-300 border-2 ${isWholesale?'bg-amber-600 border-amber-600 text-white shadow-xl scale-[1.02]':'bg-white border-slate-100 text-slate-400'}`}>بيع جملة</button>
+                                </div>
+                                <div className="grid grid-cols-2 md:grid-cols-3 gap-5">
+                                    {items.map(item => (
+                                        <button key={item.id} onClick={()=>{
+                                            const q = prompt(`كمية: ${item.name}`, "1");
+                                            if(q && !isNaN(q)) setCart([...cart, {...item, qty: parseFloat(q), currentPrice: isWholesale?(item.wholesalePrice||item.price):item.price}]);
+                                        }} className="bg-white p-8 rounded-[2.5rem] border border-slate-100 text-center relative hover:border-blue-400 hover:shadow-lg transition-all active:scale-95 group overflow-hidden">
+                                            <div className="font-black text-slate-800 text-sm mb-3 group-hover:text-blue-600 transition">{item.name}</div>
+                                            <div className="text-3xl font-black text-emerald-600">{isWholesale?(item.wholesalePrice||item.price):item.price} ج</div>
+                                            <div className={`text-[11px] font-bold mt-3 px-3 py-1 rounded-full inline-block ${item.stock < 5 ? 'bg-red-50 text-red-500 animate-pulse' : 'bg-slate-50 text-slate-400'}`}>مخزون: {item.stock}</div>
+                                            {item.isLaser && <Icon name="zap" size={16} className="absolute top-5 left-5 text-blue-400 opacity-20 group-hover:opacity-100 transition"/>}
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+                            <div className="bg-white p-10 rounded-[3.5rem] shadow-2xl border border-slate-100 h-fit sticky top-10">
+                                <h3 className="font-black mb-8 flex items-center gap-3 text-xl text-slate-800"><Icon name="shopping-cart" size={28} className="text-blue-600"/> الفاتورة الجديدة</h3>
+                                <div className="space-y-4 mb-10 max-h-72 overflow-y-auto scrollbar-hide pr-2">
+                                    {cart.map((c,idx)=>(
+                                        <div key={idx} className="bg-slate-50 p-5 rounded-3xl flex justify-between items-center text-xs font-bold border border-slate-100 group">
+                                            <span className="truncate flex-1 text-slate-700">{c.name} <span className="text-blue-600 font-black">x{c.qty}</span></span>
+                                            <span className="mx-4 font-black">{c.qty*c.currentPrice} ج</span>
+                                            <button onClick={()=>setCart(cart.filter((_,i)=>i!==idx))} className="text-red-300 hover:text-red-500 transition"><Icon name="trash-2" size={20}/></button>
+                                        </div>
+                                    ))}
+                                    {!cart.length && <div className="py-16 text-center text-slate-300 font-black border-2 border-dashed rounded-[2.5rem] border-slate-100">السلة فارغة يا بولا</div>}
+                                </div>
+                                <div className="text-5xl font-black text-center mb-10 text-emerald-800 bg-emerald-50 py-8 rounded-[3rem] border border-emerald-100 shadow-inner italic">
+                                    {(cart.reduce((a,b)=>a+(b.currentPrice*b.qty),0) - (parseFloat(pay.disc)||0)).toFixed(0)} ج
+                                </div>
+                                <div className="space-y-4">
+                                    <div className="relative">
+                                        <Icon name="user" size={18} className="absolute top-1/2 -translate-y-1/2 right-4 text-slate-400"/>
+                                        <input className="w-full p-4 pr-12 bg-slate-50 rounded-2xl text-right font-black outline-none border border-transparent focus:border-blue-500 shadow-sm" placeholder="اسم العميل" value={client.name} onChange={e=>setClient({...client, name:e.target.value})}/>
+                                    </div>
+                                    <div className="relative">
+                                        <Icon name="users" size={18} className="absolute top-1/2 -translate-y-1/2 right-4 text-slate-400"/>
+                                        <select className="w-full p-4 pr-12 bg-slate-50 rounded-2xl text-right font-black outline-none border border-transparent focus:border-blue-500 shadow-sm appearance-none" value={emp} onChange={e=>setEmp(e.target.value)}>
+                                            <option value="">-- اختر الموظف --</option>
+                                            {employees.map(e=><option key={e.id} value={e.name}>{e.name}</option>)}
+                                        </select>
+                                    </div>
+                                    <div className="flex gap-2">
+                                        <button onClick={()=>setPay({...pay, method:'cash'})} className={`flex-1 py-4 rounded-2xl font-black transition-all ${pay.method==='cash'?'bg-slate-800 text-white shadow-lg':'bg-slate-100 text-slate-400'}`}>نقدي</button>
+                                        <button onClick={()=>setPay({...pay, method:'wallet'})} className={`flex-1 py-4 rounded-2xl font-black transition-all ${pay.method==='wallet'?'bg-blue-600 text-white shadow-lg':'bg-slate-100 text-slate-400'}`}>محفظة</button>
+                                    </div>
+                                    <input className="w-full p-5 bg-slate-900 rounded-[2rem] text-center font-black text-white text-2xl outline-none border-2 border-emerald-500 shadow-xl" placeholder="المبلغ المدفوع" type="number" value={pay.paid} onChange={e=>setPay({...pay, paid:e.target.value})}/>
+                                    <button onClick={handleSave} className="w-full bg-emerald-600 text-white py-6 rounded-[2.5rem] font-black shadow-2xl hover:bg-emerald-700 active:scale-95 transition-all text-xl uppercase tracking-widest italic">حفظ الفاتورة ✅</button>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {tab === 'orders' && (
+                        <div className="space-y-8">
+                             <div className="relative max-w-2xl mx-auto">
+                                <Icon name="search" size={24} className="absolute top-1/2 -translate-y-1/2 right-5 text-slate-400"/>
+                                <input className="w-full p-6 pr-16 bg-white rounded-[2rem] shadow-sm outline-none font-black border border-slate-100 focus:border-blue-500 transition text-lg" placeholder="ابحث باسم العميل..." value={pinInput} onChange={e=>setPinInput(e.target.value)}/>
+                             </div>
+                             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+                                {orders.filter(o=>o.customerName.includes(pinInput)).slice(0, 50).map(o => (
+                                    <div key={o.id} className="bg-white p-8 rounded-[3rem] border border-slate-100 shadow-sm relative group overflow-hidden hover:shadow-xl transition-all duration-500">
+                                        <div className="flex justify-between items-start mb-6">
+                                            <div><div className="font-black text-xl text-slate-800">{o.customerName}</div><div className="text-[11px] text-slate-400 font-bold mt-1 bg-slate-50 px-3 py-1 rounded-full inline-block">{o.dateString}</div></div>
+                                            <button onClick={async()=> { if(confirm("حذف الفاتورة دي نهائياً؟")) await dbRef.collection('orders').doc(o.id).delete(); }} className="bg-red-50 p-3 rounded-2xl text-red-300 hover:bg-red-500 hover:text-white transition-all"><Icon name="trash-2" size={20}/></button>
+                                        </div>
+                                        <div className="space-y-2 mb-8 text-[12px] font-bold text-slate-500 bg-slate-50 p-6 rounded-[2rem] max-h-40 overflow-y-auto scrollbar-hide border border-slate-100 shadow-inner">
+                                            {o.items.map((i,idx)=><div key={idx} className="flex justify-between items-center py-1 border-b border-white/50 last:border-0"><span>• {i.name} (x{i.qty})</span><span className="text-slate-800">{i.qty*i.currentPrice} ج</span></div>)}
+                                        </div>
+                                        <div className="text-sm font-black mb-6 flex justify-between items-center px-4">
+                                            <div className="text-emerald-700 bg-emerald-50 px-4 py-2 rounded-xl">الإجمالي: {o.total}ج</div>
+                                            <div className="text-red-600 bg-red-50 px-4 py-2 rounded-xl font-black">الباقي: {o.remaining}ج</div>
+                                        </div>
+                                        <button onClick={()=>window.open(`https://wa.me/2${o.customerPhone||''}?text=استوديو بولا: أهلاً بك، إجمالي فاتورتك ${o.total}ج، تم دفع ${o.paid}ج، والباقي ${o.remaining}ج.`)} className="w-full bg-emerald-500 text-white py-4 rounded-[2rem] font-black text-sm flex justify-center items-center gap-3 shadow-lg shadow-emerald-500/20 active:scale-95 transition-all">
+                                            <Icon name="send" size={20}/> واتساب
+                                        </button>
                                     </div>
                                 ))}
                             </div>
                         </div>
-                    </div>
+                    )}
 
-                    <div className="space-y-6">
-                        <div className="bg-slate-900 text-white p-8 rounded-[2rem] shadow-xl">
-                            <h3 className="font-black mb-6 flex items-center gap-2"><Icon name="trending-up" className="text-emerald-400"/> أرباح اليوم:</h3>
-                            <div className="space-y-4">
-                                <div className="flex justify-between items-center bg-white/5 p-4 rounded-2xl border border-white/10">
-                                    <span className="text-xs font-bold text-slate-400">إجمالي البيع</span>
-                                    <span className="font-black text-2xl text-emerald-400">{orders.filter(o=>o.dateString===new Date().toLocaleDateString('en-CA')).reduce((s,o)=>s+o.total,0)} ج</span>
+                    {tab === 'admin' && (
+                        <div className="max-w-4xl mx-auto">
+                            {adminLock ? (
+                                <div className="bg-slate-900 p-16 rounded-[4rem] text-center shadow-2xl mx-auto max-w-sm border border-white/5">
+                                    <Icon name="shield-check" size={80} className="text-emerald-400 mx-auto mb-10 drop-shadow-[0_0_15px_rgba(52,211,153,0.3)]"/>
+                                    <h2 className="text-3xl font-black text-white mb-10 tracking-tight">الخزنة السرية</h2>
+                                    <input type="password" placeholder="****" className="bg-white/5 text-white text-center text-6xl p-6 rounded-[2rem] font-black mb-10 w-full outline-none border border-white/10 focus:border-emerald-500 transition shadow-inner" value={pinInput} onChange={e=>{ setPinInput(e.target.value); if(String(e.target.value)===String(settings.vaultPin)) { setAdminLock(false); setPinInput(''); } }}/>
                                 </div>
-                                <div className="flex justify-between items-center bg-white/5 p-4 rounded-2xl border border-white/10">
-                                    <span className="text-xs font-bold text-slate-400">عدد الفواتير</span>
-                                    <span className="font-black text-2xl text-blue-400">{orders.filter(o=>o.dateString===new Date().toLocaleDateString('en-CA')).length}</span>
-                                </div>
-                            </div>
-                        </div>
-                        
-                        <div className="bg-white p-6 rounded-[2rem] shadow-sm border border-slate-100 max-h-96 overflow-y-auto scrollbar-hide">
-                            <h3 className="font-black mb-4 flex items-center gap-2 text-slate-700"><Icon name="search"/> آخر العمليات:</h3>
-                            <div className="space-y-3">
-                                {orders.slice(0, 10).map(o => (
-                                    <div key={o.id} className="bg-slate-50 p-4 rounded-2xl text-xs flex justify-between items-center border border-slate-100 hover:bg-white transition">
-                                        <div><div className="font-black text-slate-800">{o.customerName}</div><div className="text-[10px] text-slate-400 mt-1">{o.dateString}</div></div>
-                                        <div className="text-left"><div className="font-black text-emerald-700 text-sm">{o.total} ج</div><div className="text-[9px] font-bold text-slate-400 uppercase tracking-tighter">{o.paymentMethod}</div></div>
+                            ) : (
+                                <div className="bg-white p-12 rounded-[4rem] shadow-2xl border border-slate-100 animate-in zoom-in duration-500 text-slate-800">
+                                    <div className="flex justify-between items-center mb-12 border-b pb-8">
+                                        <h3 className="text-3xl font-black tracking-tight">إدارة الاستوديو</h3>
+                                        <button onClick={()=>setAdminLock(true)} className="bg-slate-100 p-4 rounded-2xl text-slate-400 hover:bg-red-500 hover:text-white transition duration-300"><Icon name="x" size={28}/></button>
                                     </div>
-                                ))}
-                            </div>
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-16 text-center">
+                                        <div className="p-10 bg-gradient-to-br from-blue-500 to-blue-700 rounded-[3rem] text-white shadow-xl shadow-blue-500/20 relative overflow-hidden">
+                                            <Icon name="zap" size={100} className="absolute -bottom-5 -right-5 opacity-10 rotate-12"/>
+                                            <div className="text-xs font-black mb-3 uppercase tracking-[0.2em] opacity-80">دخل الليزر (هذا الشهر)</div>
+                                            <div className="text-5xl font-black mb-4">{laserStats.income} ج</div>
+                                            <div className="text-sm font-bold bg-white/20 py-2 rounded-full inline-block px-6">نصيب الشريك: {laserStats.share} ج</div>
+                                        </div>
+                                        <div className="p-10 bg-gradient-to-br from-emerald-500 to-emerald-700 rounded-[3rem] text-white shadow-xl shadow-emerald-500/20 relative overflow-hidden">
+                                            <Icon name="users" size={100} className="absolute -bottom-5 -right-5 opacity-10 -rotate-12"/>
+                                            <div className="text-xs font-black mb-3 uppercase tracking-[0.2em] opacity-80">إجمالي الموظفين</div>
+                                            <div className="text-5xl font-black mb-4">{employees.length}</div>
+                                            <div className="text-sm font-bold bg-white/20 py-2 rounded-full inline-block px-6">نشطين الآن</div>
+                                        </div>
+                                    </div>
+                                    <div className="mb-12 bg-slate-50 p-10 rounded-[3.5rem] border border-slate-200 shadow-inner">
+                                        <h4 className="font-black mb-10 flex items-center gap-4 text-2xl text-slate-700"><Icon name="award" size={32} className="text-amber-500"/> عمولات الموظفين ({settings.commissionRate}%)</h4>
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                            {employees.map(e => {
+                                                const eO = orders.filter(o => o.employeeName === e.name && o.remaining === 0);
+                                                const comm = (eO.reduce((s,o)=>s+o.total,0) * settings.commissionRate) / 100;
+                                                return (
+                                                    <div key={e.id} className="bg-white p-8 rounded-[2.5rem] border border-slate-100 flex justify-between items-center shadow-sm hover:shadow-md transition-all duration-300 group">
+                                                        <div>
+                                                            <div className="font-black text-slate-800 text-xl group-hover:text-blue-600 transition">{e.name}</div>
+                                                            <div className="text-xs text-blue-600 font-black bg-blue-50 px-4 py-2 rounded-full mt-4 inline-block shadow-sm">العمولة المستحقة: {comm.toFixed(1)} ج</div>
+                                                        </div>
+                                                        <button onClick={async()=> { if(confirm("حذف الموظف؟")) await dbRef.collection('employees').doc(e.id).delete(); }} className="text-red-100 hover:text-red-500 transition-all p-3 hover:bg-red-50 rounded-2xl"><Icon name="user-x" size={24}/></button>
+                                                    </div>
+                                                );
+                                            })}
+                                            {employees.length === 0 && <div className="col-span-full py-10 text-center text-slate-300 font-black">لا يوجد موظفين مسجلين</div>}
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
                         </div>
-                    </div>
+                    )}
                 </div>
-            </div>
-          );
+            );
         };
 
         const root = ReactDOM.createRoot(document.getElementById('root'));
