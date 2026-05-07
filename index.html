@@ -891,7 +891,7 @@
                                                 <Edit size={14}/> تعديل الفاتورة
                                             </button>
                                             <button onClick={() => {
-                                                const itemsStr = order.items.map(i=>`• ${i.name} (x{i.qty})`).join('\n');
+                                                const itemsStr = order.items.map(i=>`• ${i.name} (x${i.qty})`).join('\n');
                                                 const msg = `*فاتورة استوديو بولا عماد*\nالعميل: ${order.customerName}\n--------------\n${itemsStr}\n--------------\nالإجمالي: ${order.total} ج\nالمدفوع: ${order.paid} ج\n*الباقي: ${order.remaining} ج*`;
                                                 window.open(`https://wa.me/2${order.customerPhone || ''}?text=${encodeURIComponent(msg)}`, '_blank');
                                             }} className="bg-emerald-50 text-emerald-600 py-3 rounded-xl font-black text-xs flex items-center justify-center gap-2 border border-emerald-100">
