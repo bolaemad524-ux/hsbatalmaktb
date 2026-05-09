@@ -366,7 +366,7 @@
 
             const [isWholesale, setIsWholesale] = useState(false);
             const [selectedWholesaleId, setSelectedWholesaleId] = useState('');
-            const [wholesaleSearch, setWholesaleSearch] = useState(''); // متغير البحث الجديد للعملاء الجملة
+            const [wholesaleSearch, setWholesaleSearch] = useState(''); 
 
             const today = new Date().toLocaleDateString('en-CA');
 
@@ -1005,6 +1005,17 @@
 
                     {tab === 'customers' && (
                         <div className="space-y-6 animate-in fade-in duration-300">
+                            {/* شريط البحث عن العملاء */}
+                            <div className="relative">
+                                <Search className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400" size={20}/>
+                                <input 
+                                    className="w-full p-4 pr-12 bg-white rounded-2xl shadow-sm outline-none font-black border border-slate-100 focus:border-emerald-500 transition text-lg" 
+                                    placeholder="ابحث عن عميل بالاسم أو رقم الموبايل..." 
+                                    value={searchTerm} 
+                                    onChange={e=>setSearchTerm(e.target.value)}
+                                />
+                            </div>
+
                             <div className="bg-white p-6 rounded-[2rem] shadow-sm flex flex-col md:flex-row gap-4 border border-slate-100">
                                 <input id="c-name" className="w-full p-4 bg-slate-50 rounded-2xl font-black border-2 border-transparent focus:border-emerald-500 outline-none" placeholder="اسم العميل الجديد"/>
                                 <input id="c-phone" className="w-full p-4 bg-slate-50 rounded-2xl font-black border-2 border-transparent focus:border-emerald-500 outline-none" placeholder="رقم الموبايل"/>
@@ -1013,8 +1024,9 @@
                                     if(n){ await addDoc(collection(db,'artifacts',appId,'public','data','wholesale_customers'), {name:n, phone:p, createdAt:serverTimestamp()}); alert("تم إضافة العميل بنجاح ✅"); }
                                 }} className="bg-emerald-600 text-white px-8 py-3 rounded-2xl font-black shadow-lg hover:bg-emerald-700 transition whitespace-nowrap">إضافة عميل</button>
                             </div>
+                            
                             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                                {customers.map(c => {
+                                {customers.filter(c => c.name.includes(searchTerm) || (c.phone && c.phone.includes(searchTerm))).map(c => {
                                     const custOrders = orders.filter(o => o.customerId === c.id || o.customerName === c.name);
                                     const debt = custOrders.reduce((s, o) => s + (o.remaining || 0), 0);
                                     const total = custOrders.reduce((s, o) => s + (o.total || 0), 0);
@@ -1036,6 +1048,9 @@
                                         </div>
                                     );
                                 })}
+                                {customers.filter(c => c.name.includes(searchTerm) || (c.phone && c.phone.includes(searchTerm))).length === 0 && (
+                                    <div className="col-span-full py-10 text-center font-bold text-slate-400">لا توجد نتائج مطابقة لعملاء الجملة</div>
+                                )}
                             </div>
                         </div>
                     )}
