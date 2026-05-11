@@ -67,6 +67,9 @@
         const auth = getAuth(app);
         const db = getFirestore(app);
 
+        // النص التسويقي الثابت في أسفل الفواتير
+        const WA_FOOTER = `\nمتنساش تتابع صفحتنا على الفيس بوك ✨👇\nhttps://www.facebook.com/share/18o6vPJTep/\nوخلي المتجر معاك وتابع أقوى الخصومات 🔥😉👇\nhttps://bolaemad524-ux.github.io/matheronline-/?store=store_1773991337877 🔗`;
+
         // --- MAIN APP COMPONENT ---
         const App = () => {
           const [user, setUser] = useState(null);
@@ -541,6 +544,24 @@
                 }
                 setCart([]); setAmountPaid(''); setDiscount(''); setCustomerName(''); setCustomerPhone(''); setSelectedWholesaleId(''); setSelectedEmployee(''); alert("تم حفظ الطلب ✅");
             };
+            
+            const handleSendSalesWhatsApp = () => {
+                if(!cart.length) return alert("السلة فارغة، لا يوجد شيء لإرساله!");
+                if(!customerName.trim()) return alert("يجب إدخال اسم العميل!");
+                if(!customerPhone.trim()) return alert("يجب إدخال رقم هاتف العميل (واتساب)!");
+
+                const subTotal = cart.reduce((a,b)=>a+(b.currentPrice*b.qty),0);
+                const discountVal = parseFloat(discount) || 0;
+                const total = Math.max(0, subTotal - discountVal); 
+                const paid = parseFloat(amountPaid)||0;
+                const remaining = total - paid;
+
+                const itemsStr = cart.map(i=>`• ${i.name} (x${i.qty}) = ${i.qty*i.currentPrice} ج`).join('\n');
+                
+                const msg = `*فاتورة استوديو بولا عماد*\nالعميل: ${customerName}\n--------------\n${itemsStr}\n--------------\nالإجمالي: ${total} ج\nالمدفوع: ${paid} ج\n*الباقي: ${remaining} ج*\n${WA_FOOTER}`;
+                
+                window.open(`https://wa.me/2${customerPhone}?text=${encodeURIComponent(msg)}`, '_blank');
+            };
 
             const executeQuickPay = async (method) => {
                 if(!payConfirmModal) return;
@@ -653,9 +674,12 @@
 
                 const totalDebt = unpaidOrders.reduce((s,o)=>s+o.remaining,0);
 
-                msg += `================\n`;
-                msg += `*إجمالي المديونية الحالية:* ${totalDebt} ج\n`;
-                msg += `\nمع تحيات استوديو بولا عماد.`;
+                if(totalDebt > 0) {
+                    msg += `================\n`;
+                    msg += `*إجمالي المديونية الحالية:* ${totalDebt} ج\n`;
+                }
+
+                msg += WA_FOOTER;
 
                 window.open(`https://wa.me/2${customerDetailsModal.phone}?text=${encodeURIComponent(msg)}`, '_blank');
             };
@@ -920,7 +944,13 @@
 
                                      <input className="w-full p-3 bg-slate-100 rounded-xl text-center font-black border-2 border-transparent focus:border-emerald-500 outline-none" placeholder="المدفوع" type="number" value={amountPaid} onChange={e=>setAmountPaid(e.target.value)}/>
                                      <input className="w-full p-3 bg-slate-100 rounded-xl text-center font-black outline-none border-2 border-slate-200 focus:border-emerald-500" placeholder="اسم العميل (اجباري)" value={customerName} onChange={e=>setCustomerName(e.target.value)}/>
-                                     <input className="w-full p-3 bg-slate-100 rounded-xl text-center font-black outline-none" placeholder="رقم الهاتف (واتساب)" type="tel" value={customerPhone} onChange={e=>setCustomerPhone(e.target.value)}/>
+                                     
+                                     <div className="flex gap-2">
+                                        <input className="flex-1 p-3 bg-slate-100 rounded-xl text-center font-black outline-none" placeholder="رقم الهاتف (واتساب)" type="tel" value={customerPhone} onChange={e=>setCustomerPhone(e.target.value)}/>
+                                        <button onClick={handleSendSalesWhatsApp} className="bg-emerald-500 text-white px-4 rounded-xl flex items-center justify-center hover:bg-emerald-600 transition shadow-md" title="إرسال الفاتورة الحالية عبر واتساب">
+                                            <Send size={20}/>
+                                        </button>
+                                     </div>
                                      
                                      <div className="relative">
                                          <UserCheck className="absolute top-3 left-3 text-slate-400" size={18}/>
@@ -999,8 +1029,8 @@
                                                 <Edit size={14}/> تعديل الفاتورة
                                             </button>
                                             <button onClick={() => {
-                                                const itemsStr = order.items.map(i=>`• ${i.name} (x${i.qty})`).join('\n');
-                                                const msg = `*فاتورة استوديو بولا عماد*\nالعميل: ${order.customerName}\n--------------\n${itemsStr}\n--------------\nالإجمالي: ${order.total} ج\nالمدفوع: ${order.paid} ج\n*الباقي: ${order.remaining} ج*`;
+                                                const itemsStr = order.items.map(i=>`• ${i.name} (x${i.qty}) = ${i.qty*i.currentPrice} ج`).join('\n');
+                                                const msg = `*فاتورة استوديو بولا عماد*\nالعميل: ${order.customerName}\n--------------\n${itemsStr}\n--------------\nالإجمالي: ${order.total} ج\nالمدفوع: ${order.paid} ج\n*الباقي: ${order.remaining} ج*\n${WA_FOOTER}`;
                                                 window.open(`https://wa.me/2${order.customerPhone || ''}?text=${encodeURIComponent(msg)}`, '_blank');
                                             }} className="bg-emerald-50 text-emerald-600 py-3 rounded-xl font-black text-xs flex items-center justify-center gap-2 border border-emerald-100">
                                                 <Send size={14}/> واتساب
