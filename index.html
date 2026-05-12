@@ -602,21 +602,56 @@
                 } catch(e) { alert("حدث خطأ"); }
             };
             
-            const handlePayCustomerDebt = async (method) => {
+            const handleAddCustomerWallet = async (method) => {
                 let amount = parseFloat(customerPayAmount);
                 if(!amount || amount <= 0) return;
 
-                const custOrders = orders.filter(o => (o.customerId === customerDetailsModal.id || o.customerName === customerDetailsModal.name) && o.remaining > 0).sort((a,b) => (a.createdAt?.seconds||0) - (b.createdAt?.seconds||0));
+                try {
+                    const batch = db.batch();
+                    
+                    // 1. Update customer wallet
+                    const custRef = doc(db, 'artifacts', appId, 'public', 'data', 'wholesale_customers', customerDetailsModal.id);
+                    batch.update(custRef, {
+                        walletBalance: increment(amount)
+                    });
 
+                    // 2. Add to daily income (debt_payments is essentially our income log for deferred/extra payments)
+                    const paymentRef = doc(collection(db, 'artifacts', appId, 'public', 'data', 'debt_payments'));
+                    batch.set(paymentRef, {
+                        customerName: customerDetailsModal.name,
+                        amount: amount,
+                        dateString: today,
+                        paymentMethod: method,
+                        description: 'إيداع في محفظة العميل', 
+                        createdAt: serverTimestamp()
+                    });
+
+                    await batch.commit();
+                    
+                    // Update local state for immediate feedback
+                    setCustomerDetailsModal(prev => ({...prev, walletBalance: (prev.walletBalance || 0) + amount}));
+                    setCustomerPayAmount('');
+                    alert(`تم الإيداع في محفظة العميل بنجاح (${method === 'cash' ? 'الدرج' : 'محفظة'}) ✅`);
+                } catch(e) { alert("حدث خطأ أثناء الإيداع!"); }
+            };
+
+            const handlePayCustomerDebtFromWallet = async () => {
+                const activeCustomer = customers.find(c => c.id === customerDetailsModal.id) || customerDetailsModal;
+                const custOrders = orders.filter(o => (o.customerId === activeCustomer.id || o.customerName === activeCustomer.name) && o.remaining > 0).sort((a,b) => (a.createdAt?.seconds||0) - (b.createdAt?.seconds||0));
+                
                 const totalDebt = custOrders.reduce((s,o) => s + o.remaining, 0);
-                if(amount > totalDebt) {
-                    alert(`المبلغ المدخل أكبر من المديونية الكلية (${totalDebt} ج). تم تعديل المبلغ للحد الأقصى للمديونية.`);
-                    amount = totalDebt;
-                }
+                const currentWallet = activeCustomer.walletBalance || 0;
+                
+                if (currentWallet <= 0) return alert("محفظة العميل فارغة!");
+                if (totalDebt <= 0) return alert("لا توجد مديونيات لسدادها!");
+
+                const amountToPay = Math.min(totalDebt, currentWallet);
+
+                if(!window.confirm(`سيتم خصم ${amountToPay} ج من محفظة العميل لسداد المديونيات. تأكيد؟`)) return;
 
                 try {
                     const batch = db.batch();
-                    let remainingAmountToDistribute = amount;
+                    let remainingAmountToDistribute = amountToPay;
 
                     for(const order of custOrders) {
                         if(remainingAmountToDistribute <= 0) break;
@@ -629,31 +664,69 @@
                             remaining: increment(-payForThisOrder)
                         });
 
+                        remainingAmountToDistribute -= payForThisOrder;
+                    }
+
+                    // Deduct from wallet
+                    const custRef = doc(db, 'artifacts', appId, 'public', 'data', 'wholesale_customers', activeCustomer.id);
+                    batch.update(custRef, {
+                        walletBalance: increment(-amountToPay)
+                    });
+
+                    await batch.commit();
+                    alert("تم خصم المبلغ من المحفظة وتسديد الفواتير بنجاح ✅");
+                } catch(e) {
+                    alert("حدث خطأ");
+                }
+            };
+            
+            const handlePaySingleOrderInsideModal = async (order, method) => {
+                const activeCustomer = customers.find(c => c.id === customerDetailsModal.id) || customerDetailsModal;
+                let amountToPay = order.remaining;
+                
+                if (method === 'customer_wallet') {
+                    if ((activeCustomer.walletBalance || 0) <= 0) return alert("لا يوجد رصيد كافٍ في المحفظة!");
+                    amountToPay = Math.min(order.remaining, activeCustomer.walletBalance);
+                    if (!window.confirm(`سيتم خصم ${amountToPay} ج من محفظة العميل لسداد ${amountToPay === order.remaining ? 'الفاتورة بالكامل' : 'جزء من الفاتورة'}. تأكيد؟`)) return;
+                } else {
+                    if(!window.confirm(`تأكيد سداد ${order.remaining} ج عن طريق ${method === 'cash' ? 'الدرج' : 'محفظة فودافون'}؟`)) return;
+                }
+
+                try {
+                    const batch = db.batch();
+                    const orderRef = doc(db, 'artifacts', appId, 'public', 'data', 'orders', order.id);
+                    batch.update(orderRef, {
+                        paid: increment(amountToPay),
+                        remaining: increment(-amountToPay)
+                    });
+
+                    if (method === 'customer_wallet') {
+                        const custRef = doc(db, 'artifacts', appId, 'public', 'data', 'wholesale_customers', activeCustomer.id);
+                        batch.update(custRef, {
+                            walletBalance: increment(-amountToPay)
+                        });
+                    } else {
                         const paymentRef = doc(collection(db, 'artifacts', appId, 'public', 'data', 'debt_payments'));
                         batch.set(paymentRef, {
                             orderId: order.id,
-                            customerName: customerDetailsModal.name,
-                            amount: payForThisOrder,
+                            customerName: order.customerName,
+                            amount: amountToPay,
                             dateString: today,
                             paymentMethod: method,
                             createdAt: serverTimestamp()
                         });
-
-                        remainingAmountToDistribute -= payForThisOrder;
                     }
 
                     await batch.commit();
-                    setCustomerPayAmount('');
-                    alert(`تم خصم المبلغ من مديونية العميل وإضافته لـ (${method === 'cash' ? 'الدرج' : 'المحفظة'}) بنجاح ✅`);
-                } catch(err) {
-                    alert("حدث خطأ أثناء الدفع!");
-                }
+                    alert("تم السداد بنجاح ✅");
+                } catch(e) { alert("حدث خطأ"); }
             };
 
             const sendFullCustomerStatement = () => {
-                const unpaidOrders = orders.filter(o => (o.customerId === customerDetailsModal.id || o.customerName === customerDetailsModal.name) && o.remaining > 0).sort((a,b) => (b.createdAt?.seconds||0) - (a.createdAt?.seconds||0));
+                const activeCustomer = customers.find(c => c.id === customerDetailsModal.id) || customerDetailsModal;
+                const unpaidOrders = orders.filter(o => (o.customerId === activeCustomer.id || o.customerName === activeCustomer.name) && o.remaining > 0).sort((a,b) => (b.createdAt?.seconds||0) - (a.createdAt?.seconds||0));
                 
-                let msg = `*كشف حساب تفصيلي*\nالعميل: ${customerDetailsModal.name}\n================\n\n`;
+                let msg = `*كشف حساب تفصيلي*\nالعميل: ${activeCustomer.name}\n================\n\n`;
                 
                 if (unpaidOrders.length === 0) {
                     msg += `ليس عليك أي مديونيات حالياً. حسابك خالص ✅\n\n`;
@@ -669,14 +742,18 @@
 
                 const totalDebt = unpaidOrders.reduce((s,o)=>s+o.remaining,0);
 
+                msg += `================\n`;
                 if(totalDebt > 0) {
-                    msg += `================\n`;
                     msg += `*إجمالي المديونية الحالية:* ${totalDebt} ج\n`;
+                }
+                
+                if ((activeCustomer.walletBalance || 0) > 0) {
+                    msg += `*رصيد محفظتك لدينا:* ${activeCustomer.walletBalance} ج\n`;
                 }
 
                 msg += WA_FOOTER;
 
-                window.open(`https://wa.me/2${customerDetailsModal.phone}?text=${encodeURIComponent(msg)}`, '_blank');
+                window.open(`https://wa.me/2${activeCustomer.phone}?text=${encodeURIComponent(msg)}`, '_blank');
             };
 
             const executeDeleteOrder = async () => {
@@ -1229,10 +1306,11 @@
 
                     {/* --- نافذة تفاصيل كشف حساب العميل --- */}
                     {customerDetailsModal && (() => {
-                        // هنجيب بس الفواتير اللي عليها باقي
-                        const custOrdersAll = orders.filter(o => o.customerId === customerDetailsModal.id || o.customerName === customerDetailsModal.name).sort((a,b) => (b.createdAt?.seconds||0) - (a.createdAt?.seconds||0));
+                        const activeCustomer = customers.find(c => c.id === customerDetailsModal.id) || customerDetailsModal;
+                        const custOrdersAll = orders.filter(o => o.customerId === activeCustomer.id || o.customerName === activeCustomer.name).sort((a,b) => (b.createdAt?.seconds||0) - (a.createdAt?.seconds||0));
                         const custOrders = custOrdersAll.filter(o => o.remaining > 0);
                         const totalDebt = custOrders.reduce((s,o) => s + o.remaining, 0);
+                        const walletBalance = activeCustomer.walletBalance || 0;
 
                         return (
                             <div className="fixed inset-0 bg-black/80 flex items-center justify-center p-2 md:p-4 z-[100]">
@@ -1240,8 +1318,8 @@
                                     {/* Header */}
                                     <div className="bg-white p-6 border-b border-slate-200 flex justify-between items-center shadow-sm z-10">
                                         <div>
-                                            <h2 className="text-2xl font-black text-slate-800">{customerDetailsModal.name}</h2>
-                                            <div className="text-sm font-bold text-slate-500 flex items-center gap-1 mt-1"><Smartphone size={14}/> {customerDetailsModal.phone || 'لا يوجد رقم'}</div>
+                                            <h2 className="text-2xl font-black text-slate-800">{activeCustomer.name}</h2>
+                                            <div className="text-sm font-bold text-slate-500 flex items-center gap-1 mt-1"><Smartphone size={14}/> {activeCustomer.phone || 'لا يوجد رقم'}</div>
                                         </div>
                                         <button onClick={()=>setCustomerDetailsModal(null)} className="bg-slate-100 p-2 rounded-xl text-slate-500 hover:text-red-500 hover:bg-red-50 transition"><X size={24}/></button>
                                     </div>
@@ -1250,37 +1328,48 @@
                                     <div className="flex-1 overflow-y-auto p-4 md:p-6 space-y-6">
                                         
                                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                            {/* إجمالي المديونية */}
-                                            <div className="bg-red-50 border-2 border-red-100 p-6 rounded-[2rem] flex flex-col items-center justify-center text-center">
-                                                <div className="text-xs font-black text-red-500 mb-2">إجمالي المديونية الحالية</div>
-                                                <div className="text-4xl font-black text-red-700">{totalDebt} ج</div>
+                                            {/* إجمالي المديونية والمحفظة */}
+                                            <div className="flex gap-4">
+                                                <div className="bg-red-50 border-2 border-red-100 p-4 rounded-[2rem] flex-1 flex flex-col items-center justify-center text-center">
+                                                    <div className="text-xs font-black text-red-500 mb-1">إجمالي المديونية</div>
+                                                    <div className="text-2xl font-black text-red-700">{totalDebt} ج</div>
+                                                </div>
+                                                <div className="bg-indigo-50 border-2 border-indigo-100 p-4 rounded-[2rem] flex-1 flex flex-col items-center justify-center text-center">
+                                                    <div className="text-xs font-black text-indigo-500 mb-1">رصيد المحفظة</div>
+                                                    <div className="text-2xl font-black text-indigo-700">{walletBalance} ج</div>
+                                                </div>
                                             </div>
 
-                                            {/* دفع مبلغ حر من المديونية */}
-                                            <div className="bg-white border border-slate-200 p-6 rounded-[2rem] shadow-sm flex flex-col justify-center">
-                                                <h3 className="font-black text-sm text-slate-700 mb-3">سداد دفعة تحت الحساب</h3>
+                                            {/* إيداع في المحفظة */}
+                                            <div className="bg-white border border-slate-200 p-4 rounded-[2rem] shadow-sm flex flex-col justify-center">
+                                                <h3 className="font-black text-sm text-slate-700 mb-2">إيداع رصيد بالمحفظة:</h3>
                                                 <input 
                                                     type="number" 
-                                                    className="w-full bg-slate-50 border border-slate-200 p-3 rounded-xl text-center font-black text-lg outline-none focus:border-emerald-500 mb-2" 
-                                                    placeholder="المبلغ" 
+                                                    className="w-full bg-slate-50 border border-slate-200 p-2 rounded-xl text-center font-black text-lg outline-none focus:border-indigo-500 mb-2" 
+                                                    placeholder="المبلغ للإيداع" 
                                                     value={customerPayAmount}
                                                     onChange={e=>setCustomerPayAmount(e.target.value)}
                                                 />
                                                 <div className="flex gap-2 w-full">
-                                                    <button onClick={() => handlePayCustomerDebt('cash')} className="flex-1 bg-emerald-600 text-white py-3 rounded-xl font-black text-sm shadow-md hover:bg-emerald-700 transition">سداد (درج)</button>
-                                                    <button onClick={() => handlePayCustomerDebt('wallet')} className="flex-1 bg-blue-600 text-white py-3 rounded-xl font-black text-sm shadow-md hover:bg-blue-700 transition">سداد (محفظة)</button>
+                                                    <button onClick={() => handleAddCustomerWallet('cash')} className="flex-1 bg-emerald-600 text-white py-2 rounded-xl font-black text-xs shadow-md hover:bg-emerald-700 transition">إيداع (درج)</button>
+                                                    <button onClick={() => handleAddCustomerWallet('wallet')} className="flex-1 bg-blue-600 text-white py-2 rounded-xl font-black text-xs shadow-md hover:bg-blue-700 transition">إيداع (محفظة)</button>
                                                 </div>
-                                                <p className="text-[10px] text-slate-400 font-bold mt-2 text-center">المبلغ سيُخصم من أقدم الفواتير تلقائياً</p>
                                             </div>
                                         </div>
+                                        
+                                        {totalDebt > 0 && walletBalance > 0 && (
+                                             <button onClick={handlePayCustomerDebtFromWallet} className="w-full bg-indigo-600 text-white py-3 rounded-xl font-black text-sm shadow-md hover:bg-indigo-700 transition flex items-center justify-center gap-2 mt-4">
+                                                 <CheckCircle size={18}/> تسديد مديونيات الفواتير تلقائياً من رصيد المحفظة
+                                             </button>
+                                        )}
 
                                         {/* الفواتير وتفاصيلها */}
                                         <div>
-                                            <h3 className="font-black text-lg text-slate-800 mb-4 flex items-center gap-2"><FileText size={20}/> سجل الفواتير والمشتريات المعلقة</h3>
+                                            <h3 className="font-black text-lg text-slate-800 mb-4 flex items-center gap-2 mt-4"><FileText size={20}/> سجل الفواتير والمشتريات المعلقة</h3>
                                             <div className="space-y-4">
                                                 {custOrders.map(order => (
                                                     <div key={order.id} className="bg-white rounded-2xl border border-red-200 shadow-sm overflow-hidden animate-in fade-in">
-                                                        <div className="p-4 flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-red-50/30">
+                                                        <div className="p-4 flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-red-50/30 border-b border-red-100">
                                                             <div>
                                                                 <div className="text-xs font-black text-slate-500 mb-1">{order.dateString}</div>
                                                                 <div className="flex items-center gap-3 font-black text-sm">
@@ -1288,9 +1377,13 @@
                                                                     <span className="text-red-600">باقي: {order.remaining} ج</span>
                                                                 </div>
                                                             </div>
-                                                            <button onClick={()=>setPayConfirmModal(order)} className="w-full md:w-auto bg-emerald-100 text-emerald-700 hover:bg-emerald-600 hover:text-white px-4 py-2 rounded-xl text-xs font-black flex items-center justify-center gap-2 transition">
-                                                                <CheckCircle size={16}/> سداد هذه الفاتورة بالكامل
-                                                            </button>
+                                                            <div className="flex gap-1 mt-3 md:mt-0 w-full md:w-auto flex-wrap justify-end">
+                                                                <button onClick={()=>handlePaySingleOrderInsideModal(order, 'cash')} className="flex-1 md:flex-none bg-emerald-100 text-emerald-700 hover:bg-emerald-600 hover:text-white px-3 py-2 rounded-xl text-xs font-black transition">سداد (درج)</button>
+                                                                <button onClick={()=>handlePaySingleOrderInsideModal(order, 'wallet')} className="flex-1 md:flex-none bg-blue-100 text-blue-700 hover:bg-blue-600 hover:text-white px-3 py-2 rounded-xl text-xs font-black transition">سداد (محفظة)</button>
+                                                                {walletBalance > 0 && (
+                                                                    <button onClick={()=>handlePaySingleOrderInsideModal(order, 'customer_wallet')} className="w-full md:w-auto bg-indigo-100 text-indigo-700 hover:bg-indigo-600 hover:text-white px-3 py-2 rounded-xl text-xs font-black transition mt-1 md:mt-0">خصم من محفظته</button>
+                                                                )}
+                                                            </div>
                                                         </div>
                                                         <div className="p-4 bg-white grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs font-bold text-slate-600">
                                                             {order.items.map((i, idx) => (
