@@ -42,7 +42,7 @@
         import { createRoot } from 'react-dom/client';
         import { initializeApp } from 'firebase/app';
         import { getAuth, signInAnonymously, onAuthStateChanged } from 'firebase/auth';
-        import { getFirestore, collection, addDoc, onSnapshot, doc, updateDoc, deleteDoc, serverTimestamp, increment, setDoc, query, where, getDocs } from 'firebase/firestore';
+        import { getFirestore, collection, addDoc, onSnapshot, doc, updateDoc, deleteDoc, serverTimestamp, increment, setDoc, query, where, getDocs, writeBatch } from 'firebase/firestore';
         import { 
           ShoppingCart, Plus, Trash2, Send, Package, Edit,
           Wallet, Lock, Search, Smartphone, X, Banknote, MinusCircle, Zap, Users, LogOut, Key, 
@@ -364,7 +364,7 @@
             const [customerDetailsModal, setCustomerDetailsModal] = useState(null);
             const [customerPayAmount, setCustomerPayAmount] = useState('');
             
-            // Custom Payment Confirmation Modal (Replaces browser window.confirm)
+            // Custom Payment Confirmation Modal
             const [singleOrderPayConfirm, setSingleOrderPayConfirm] = useState(null); // {order, method}
 
             const [itemToAddToOrder, setItemToAddToOrder] = useState(null); 
@@ -476,7 +476,6 @@
                 try {
                     await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'inventory', deleteProductModal.id));
                     setDeleteProductModal(null);
-                    // No window.alert here to prevent browser blocking, UI updates instantly
                 } catch(e) {
                     alert("حدث خطأ أثناء الحذف");
                 }
@@ -564,7 +563,6 @@
                     if(!i.isPrinting) await updateDoc(doc(db,'artifacts',appId,'public','data','inventory',i.id), {stock: increment(-i.qty)});
                 }
                 setCart([]); setAmountPaid(''); setDiscount(''); setCustomerName(''); setCustomerPhone(''); setSelectedWholesaleId(''); setSelectedEmployee(''); 
-                // Removed alert to prevent browser blocking
             };
             
             const handleSendSalesWhatsApp = () => {
@@ -605,12 +603,13 @@
                 } catch(e) { alert("حدث خطأ"); }
             };
             
+            // اصلاح مشكلة db.batch() واستخدام writeBatch(db) الصحيحة
             const handleAddCustomerWallet = async (method) => {
                 let amount = parseFloat(customerPayAmount);
                 if(!amount || amount <= 0) return;
 
                 try {
-                    const batch = db.batch();
+                    const batch = writeBatch(db);
                     
                     const custRef = doc(db, 'artifacts', appId, 'public', 'data', 'wholesale_customers', customerDetailsModal.id);
                     batch.update(custRef, {
@@ -631,9 +630,10 @@
                     
                     setCustomerDetailsModal(prev => ({...prev, walletBalance: (prev.walletBalance || 0) + amount}));
                     setCustomerPayAmount('');
-                } catch(e) { alert("حدث خطأ أثناء الإيداع!"); }
+                } catch(e) { console.error(e); alert("حدث خطأ أثناء الإيداع!"); }
             };
 
+            // اصلاح مشكلة db.batch() واستخدام writeBatch(db) الصحيحة
             const handlePayCustomerDebtFromWallet = async () => {
                 const activeCustomer = customers.find(c => c.id === customerDetailsModal.id) || customerDetailsModal;
                 const custOrders = orders.filter(o => (o.customerId === activeCustomer.id || o.customerName === activeCustomer.name) && o.remaining > 0).sort((a,b) => (a.createdAt?.seconds||0) - (b.createdAt?.seconds||0));
@@ -646,11 +646,11 @@
 
                 const amountToPay = Math.min(totalDebt, currentWallet);
 
-                // We keep one confirm here since it's a rare bulk action, but better to avoid it if user abuses it. Let's risk it for bulk.
+                // استخدام نافذة المتصفح العادية هنا لأنها عملية نادرة (سداد جميع الديون مرة واحدة)
                 if(!window.confirm(`سيتم خصم ${amountToPay} ج من محفظة العميل لسداد المديونيات. تأكيد؟`)) return;
 
                 try {
-                    const batch = db.batch();
+                    const batch = writeBatch(db);
                     let remainingAmountToDistribute = amountToPay;
 
                     for(const order of custOrders) {
@@ -667,7 +667,6 @@
                         remainingAmountToDistribute -= payForThisOrder;
                     }
 
-                    // Deduct from wallet
                     const custRef = doc(db, 'artifacts', appId, 'public', 'data', 'wholesale_customers', activeCustomer.id);
                     batch.update(custRef, {
                         walletBalance: increment(-amountToPay)
@@ -675,11 +674,20 @@
 
                     await batch.commit();
                 } catch(e) {
-                    alert("حدث خطأ");
+                    console.error(e); alert("حدث خطأ");
                 }
             };
             
-            // Custom UI Confirm execution logic
+            // فتح نافذة التأكيد الاحترافية بدلاً من alert المتصفح المزعج
+            const handlePaySingleOrderInsideModal = (order, method) => {
+                const activeCustomer = customers.find(c => c.id === customerDetailsModal.id) || customerDetailsModal;
+                if (method === 'customer_wallet' && (activeCustomer.walletBalance || 0) <= 0) {
+                    return alert("لا يوجد رصيد كافٍ في المحفظة!");
+                }
+                setSingleOrderPayConfirm({order, method});
+            };
+
+            // تنفيذ الدفع بعد تأكيد الشاشة الاحترافية
             const executeSingleOrderPayInsideModal = async () => {
                 if(!singleOrderPayConfirm) return;
                 const { order, method } = singleOrderPayConfirm;
@@ -691,7 +699,7 @@
                 }
 
                 try {
-                    const batch = db.batch();
+                    const batch = writeBatch(db); // استخدام الدالة الصحيحة لنسخة فايربيز 9
                     const orderRef = doc(db, 'artifacts', appId, 'public', 'data', 'orders', order.id);
                     batch.update(orderRef, {
                         paid: increment(amountToPay),
@@ -717,16 +725,10 @@
 
                     await batch.commit();
                     setSingleOrderPayConfirm(null);
-                } catch(e) { alert("حدث خطأ"); }
-            };
-
-            const handlePaySingleOrderInsideModal = (order, method) => {
-                const activeCustomer = customers.find(c => c.id === customerDetailsModal.id) || customerDetailsModal;
-                if (method === 'customer_wallet' && (activeCustomer.walletBalance || 0) <= 0) {
-                    return alert("لا يوجد رصيد كافٍ في المحفظة!");
+                } catch(e) { 
+                    console.error(e);
+                    alert("حدث خطأ أثناء السداد!"); 
                 }
-                // Open custom modal instead of browser confirm
-                setSingleOrderPayConfirm({order, method});
             };
 
             const sendFullCustomerStatement = () => {
