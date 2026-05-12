@@ -5,8 +5,10 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>نظام استوديو بولا V23.2</title>
     
+    <!-- تحميل تصميم Tailwind -->
     <script src="https://cdn.tailwindcss.com"></script>
     
+    <!-- تحميل مترجم React للمتصفح -->
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
     
     <style>
@@ -16,6 +18,7 @@
         body { font-family: system-ui, -apple-system, sans-serif; }
     </style>
 
+    <!-- خريطة المكاتب لجلب React و Firebase مباشرة من السيرفر -->
     <script type="importmap">
     {
       "imports": {
@@ -37,6 +40,7 @@
         </div>
     </div>
 
+    <!-- كود البرنامج (React) -->
     <script type="text/babel" data-type="module">
         import React, { useState, useEffect, useMemo } from 'react';
         import { createRoot } from 'react-dom/client';
@@ -46,7 +50,7 @@
         import { 
           ShoppingCart, Plus, Trash2, Send, Package, Edit,
           Wallet, Lock, Search, Smartphone, X, Banknote, MinusCircle, Zap, Users, LogOut, Key, 
-          Settings, Check, RefreshCcw, AlertTriangle, FileText, Printer, Percent, Camera, Layers, UserCheck, TrendingUp, ShieldCheck, ClipboardList, Download, Upload, Database, CheckCircle, BellRing
+          Settings, Check, RefreshCcw, AlertTriangle, FileText, Printer, Percent, Camera, Layers, UserCheck, TrendingUp, ShieldCheck, ClipboardList, Download, Upload, Database, CheckCircle, BellRing, Star
         } from 'lucide-react';
 
         // =========================================================================
@@ -67,13 +71,93 @@
         const auth = getAuth(app);
         const db = getFirestore(app);
 
-        // النص التسويقي الثابت في أسفل الفواتير
-        const WA_FOOTER = `\nمتنساش تتابع صفحتنا على الفيس بوك ✨👇\nhttps://www.facebook.com/share/18o6vPJTep/\nوخلي المتجر معاك وتابع أقوى الخصومات 🔥😉👇\nhttps://bolaemad524-ux.github.io/matheronline-/?store=store_1773991337877 🔗`;
+        // --- Rating System Component (For Customers) ---
+        const RatingSystem = ({ db, appId }) => {
+            const urlParams = new URLSearchParams(window.location.search);
+            const cname = urlParams.get('cname') || '';
+            const cphone = urlParams.get('cphone') || '';
+            
+            const [rating, setRating] = useState(0);
+            const [hover, setHover] = useState(0);
+            const [feedback, setFeedback] = useState('');
+            const [submitted, setSubmitted] = useState(false);
+
+            const handleSubmit = async () => {
+                if(rating === 0) return alert("برجاء اختيار تقييمك بعدد النجوم أولاً");
+                
+                await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'ratings'), {
+                    customerName: cname,
+                    customerPhone: cphone,
+                    stars: rating,
+                    feedback: feedback,
+                    dateString: new Date().toLocaleDateString('en-CA'),
+                    createdAt: serverTimestamp()
+                });
+                
+                setSubmitted(true);
+            };
+
+            if (submitted) {
+                return (
+                    <div className="min-h-screen bg-slate-900 flex flex-col items-center justify-center p-6 text-center" dir="rtl">
+                        <div className="bg-emerald-500/20 w-24 h-24 rounded-full flex items-center justify-center mx-auto mb-6 text-emerald-400">
+                            <CheckCircle size={48}/>
+                        </div>
+                        <h2 className="text-3xl font-black text-white mb-4">شكراً لتقييمك!</h2>
+                        <p className="text-slate-400 font-bold text-lg leading-relaxed">
+                            رأيك يهمنا جداً وبيساعدنا نطور من خدماتنا في استوديو بولا عماد.<br/>نتمنى نشوفك دايماً.
+                        </p>
+                    </div>
+                );
+            }
+
+            return (
+                <div className="min-h-screen bg-slate-900 flex flex-col items-center justify-center p-6 text-center relative" dir="rtl">
+                    <div className="bg-slate-800 p-8 rounded-[2.5rem] w-full max-w-md shadow-2xl border border-slate-700">
+                        <div className="bg-indigo-500/20 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-6 text-indigo-400">
+                            <Star size={32} fill="currentColor"/>
+                        </div>
+                        <h2 className="text-2xl font-black text-white mb-2">تقييم الخدمة</h2>
+                        {cname && <p className="text-indigo-400 font-bold mb-6 text-lg">أهلاً بك أ. {cname}</p>}
+                        
+                        <p className="text-slate-300 text-sm font-bold mb-6">ما مدى رضاك عن خدمتنا في استوديو بولا عماد؟</p>
+                        
+                        <div className="flex justify-center gap-2 mb-8" dir="ltr">
+                            {[1,2,3,4,5].map(star => (
+                                <button 
+                                    key={star}
+                                    onClick={() => setRating(star)}
+                                    onMouseEnter={() => setHover(star)}
+                                    onMouseLeave={() => setHover(rating)}
+                                    className="transition-transform hover:scale-110 focus:outline-none"
+                                >
+                                    <Star 
+                                        size={40} 
+                                        fill={(hover || rating) >= star ? "#fbbf24" : "transparent"} 
+                                        color={(hover || rating) >= star ? "#fbbf24" : "#475569"} 
+                                        strokeWidth={1.5} 
+                                    />
+                                </button>
+                            ))}
+                        </div>
+
+                        <textarea 
+                            className="w-full p-4 bg-slate-900 rounded-2xl mb-6 text-right font-black text-white border border-slate-600 focus:border-indigo-500 outline-none resize-none h-32"
+                            placeholder="لو عندك أي ملاحظة أو مقترح ياريت تشاركنا بيه (اختياري)..."
+                            value={feedback}
+                            onChange={e=>setFeedback(e.target.value)}
+                        />
+
+                        <button onClick={handleSubmit} className="w-full bg-indigo-600 text-white py-4 rounded-xl font-black text-lg shadow-lg hover:bg-indigo-700 transition">إرسال التقييم</button>
+                    </div>
+                </div>
+            );
+        };
 
         // --- MAIN APP COMPONENT ---
         const App = () => {
           const [user, setUser] = useState(null);
-          const [currentView, setCurrentView] = useState('landing');
+          const [currentView, setCurrentView] = useState('loading');
           const [authView, setAuthView] = useState(null); 
           const [appSettings, setAppSettings] = useState({ 
               laser: '941997', 
@@ -92,6 +176,7 @@
           const [laserBills, setLaserBills] = useState([]);
           const [debtPayments, setDebtPayments] = useState([]); 
           const [deletedLogs, setDeletedLogs] = useState([]); 
+          const [ratings, setRatings] = useState([]); 
 
           useEffect(() => {
             const initAuth = async () => {
@@ -99,6 +184,12 @@
             };
             initAuth();
             onAuthStateChanged(auth, setUser);
+
+            // Routing Logic for Rating View
+            const urlParams = new URLSearchParams(window.location.search);
+            if (urlParams.get('view') === 'rating') {
+                setCurrentView('rating');
+            }
           }, []);
 
           useEffect(() => {
@@ -124,6 +215,7 @@
               onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', 'laser_bills'), s => setLaserBills(s.docs.map(d=>({id:d.id, ...d.data()})).sort((a,b)=>(b.createdAt?.seconds||0)-(a.createdAt?.seconds||0)))),
               onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', 'debt_payments'), s => setDebtPayments(s.docs.map(d=>({id:d.id, ...d.data()})))),
               onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', 'deleted_logs'), s => setDeletedLogs(s.docs.map(d=>({id:d.id, ...d.data()})).sort((a,b)=>(b.deletedAt?.seconds||0)-(a.deletedAt?.seconds||0)))), 
+              onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', 'ratings'), s => setRatings(s.docs.map(d=>({id:d.id, ...d.data()})).sort((a,b)=>(b.createdAt?.seconds||0)-(a.createdAt?.seconds||0)))), 
             ];
             return () => subs.forEach(unsub => unsub());
           }, [user]);
@@ -134,6 +226,10 @@
           };
 
           if (!user) return null;
+
+          if (currentView === 'rating') {
+              return <RatingSystem db={db} appId={appId} />;
+          }
 
           if (currentView === 'landing') {
             return (
@@ -166,7 +262,7 @@
           }
 
           if (currentView === 'laser') return <LaserSystem backToHome={() => setCurrentView('landing')} orders={orders} laserBills={laserBills} db={db} appId={appId} />;
-          if (currentView === 'office') return <OfficeSystem backToHome={() => setCurrentView('landing')} orders={orders} items={items} expenses={expenses} customers={customers} employees={employees} debtPayments={debtPayments} deletedLogs={deletedLogs} db={db} appId={appId} appSettings={appSettings} />;
+          if (currentView === 'office') return <OfficeSystem backToHome={() => setCurrentView('landing')} orders={orders} items={items} expenses={expenses} customers={customers} employees={employees} debtPayments={debtPayments} deletedLogs={deletedLogs} ratings={ratings} db={db} appId={appId} appSettings={appSettings} />;
           
           return null;
         };
@@ -318,7 +414,7 @@
         // =====================================================================
         // === OFFICE SYSTEM
         // =====================================================================
-        const OfficeSystem = ({ backToHome, orders, items, expenses, customers, employees, debtPayments, deletedLogs, db, appId, appSettings }) => {
+        const OfficeSystem = ({ backToHome, orders, items, expenses, customers, employees, debtPayments, deletedLogs, ratings, db, appId, appSettings }) => {
             const [tab, setTab] = useState('sales');
             const [cart, setCart] = useState([]);
             const [amountPaid, setAmountPaid] = useState('');
@@ -415,7 +511,6 @@
                 return Array.from(years).sort().reverse();
             }, [orders, expenses, debtPayments]);
             
-            // حساب الفواتير المتأخرة أكتر من 3 أيام
             const getOverdueOrders = () => {
                 const todayDate = new Date(today);
                 return orders.filter(o => {
@@ -428,6 +523,24 @@
                 });
             };
             const overdueOrdersList = getOverdueOrders();
+
+            // --- Helper Function: WhatsApp Footer Builder ---
+            const getCustomerFooter = (cName, cPhone) => {
+                // نحدد إذا كان العميل ده عميل جملة محفوظ في النظام ولا لأ
+                const isWholesaleCust = customers.some(c => c.name === cName || c.phone === cPhone);
+                
+                // رابط صفحة التقييم الخاصة بالسيستم
+                const ratingLink = window.location.href.split('?')[0] + "?view=rating&cname=" + encodeURIComponent(cName||'') + "&cphone=" + (cPhone||'');
+                const ratingMsg = `\nمتنساش تقيمنا من خلال الرابط ده عشان تساعدنا فى تطوير خدمتنا ✨👇\n${ratingLink}`;
+                
+                if (isWholesaleCust) {
+                    return ratingMsg; // لعملاء الجملة رابط التقييم فقط
+                }
+                
+                // لعملاء القطاعي (رسائل التسويق + رابط التقييم)
+                const retailMarketingMsg = `\nمتنساش تتابع صفحتنا على الفيس بوك ✨👇\nhttps://www.facebook.com/share/18o6vPJTep/\nوخلي المتجر معاك وتابع أقوى الخصومات 🔥😉👇\nhttps://bolaemad524-ux.github.io/matheronline-/?store=store_1773991337877 🔗\n`;
+                return retailMarketingMsg + ratingMsg;
+            };
 
             const handleExportInventory = () => {
                 const dataStr = JSON.stringify(items, null, 2);
@@ -565,7 +678,6 @@
                 setCart([]); setAmountPaid(''); setDiscount(''); setCustomerName(''); setCustomerPhone(''); setSelectedWholesaleId(''); setSelectedEmployee(''); 
             };
             
-            // الزرار الذكي الجديد لإرسال رسالة الواتساب للعميل القطاعي أو الجملة بكامل حساباته
             const handleSendSalesWhatsApp = () => {
                 if(!cart.length) return alert("السلة فارغة، لا يوجد شيء لإرساله!");
                 if(!customerName.trim()) return alert("يجب إدخال اسم العميل!");
@@ -581,7 +693,7 @@
                 
                 let msg = '';
 
-                // إذا كان عميل جملة ومختار من القائمة
+                // إذا كان عميل جملة (مسجل في القائمة وتم اختياره)
                 if (isWholesale && selectedWholesaleId) {
                     const activeCustomer = customers.find(c => c.id === selectedWholesaleId);
                     const unpaidOrders = orders.filter(o => (o.customerId === selectedWholesaleId || o.customerName === customerName) && o.remaining > 0).sort((a,b) => (b.createdAt?.seconds||0) - (a.createdAt?.seconds||0));
@@ -614,11 +726,11 @@
                         msg += `*رصيد محفظتك لدينا:* ${activeCustomer.walletBalance} ج\n`;
                     }
 
-                    msg += WA_FOOTER;
+                    msg += getCustomerFooter(customerName, customerPhone);
 
                 } else {
-                    // عميل قطاعي عادي أو عميل لم يتم تسجيله
-                    msg = `*فاتورة استوديو بولا عماد*\nالعميل: ${customerName}\n--------------\n${currentItemsStr}\n--------------\nالإجمالي: ${total} ج\nالمدفوع: ${paid} ج\n*الباقي: ${currentRemaining} ج*\n${WA_FOOTER}`;
+                    // عميل قطاعي عادي
+                    msg = `*فاتورة استوديو بولا عماد*\nالعميل: ${customerName}\n--------------\n${currentItemsStr}\n--------------\nالإجمالي: ${total} ج\nالمدفوع: ${paid} ج\n*الباقي: ${currentRemaining} ج*\n${getCustomerFooter(customerName, customerPhone)}`;
                 }
                 
                 window.open(`https://wa.me/2${customerPhone}?text=${encodeURIComponent(msg)}`, '_blank');
@@ -627,11 +739,14 @@
             const executeQuickPay = async (method) => {
                 if(!payConfirmModal) return;
                 try {
-                    await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'orders', payConfirmModal.id), {
+                    const batch = writeBatch(db); 
+                    const orderRef = doc(db, 'artifacts', appId, 'public', 'data', 'orders', payConfirmModal.id);
+                    batch.update(orderRef, {
                         paid: payConfirmModal.total,
                         remaining: 0
                     });
-                    await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'debt_payments'), {
+                    const paymentRef = doc(collection(db, 'artifacts', appId, 'public', 'data', 'debt_payments'));
+                    batch.set(paymentRef, {
                         amount: payConfirmModal.remaining,
                         orderId: payConfirmModal.id,
                         customerName: payConfirmModal.customerName,
@@ -640,6 +755,7 @@
                         createdAt: serverTimestamp()
                     });
 
+                    await batch.commit();
                     setPayConfirmModal(null);
                 } catch(e) { alert("حدث خطأ"); }
             };
@@ -796,7 +912,7 @@
                     msg += `*رصيد محفظتك لدينا:* ${activeCustomer.walletBalance} ج\n`;
                 }
 
-                msg += WA_FOOTER;
+                msg += getCustomerFooter(activeCustomer.name, activeCustomer.phone);
 
                 window.open(`https://wa.me/2${activeCustomer.phone}?text=${encodeURIComponent(msg)}`, '_blank');
             };
@@ -947,6 +1063,7 @@
                                 {id:'customers', n:'العملاء', i:<Users size={14}/>},
                                 {id:'expenses', n:'المصاريف', i:<MinusCircle size={14}/>},
                                 {id:'admin', n:'الخزنة', i:<Lock size={14}/>},
+                                {id:'ratings', n:'التقييمات', i:<Star size={14}/>},
                                 {id:'settings', n:'الإعدادات', i:<Settings size={14}/>}
                             ].map(t => (
                                 <button key={t.id} onClick={()=>setTab(t.id)} className={`px-4 py-2 rounded-xl text-xs font-black flex items-center gap-2 whitespace-nowrap transition ${tab===t.id?'bg-emerald-600 text-white shadow-lg':'bg-slate-100 text-slate-500 hover:bg-slate-200'}`}>
@@ -955,6 +1072,44 @@
                             ))}
                         </div>
                     </div>
+
+                    {tab === 'ratings' && (
+                        <div className="space-y-6 animate-in fade-in duration-300">
+                            <h2 className="text-2xl font-black text-slate-800 mb-6 flex items-center gap-2"><Star className="text-amber-500" fill="currentColor"/> تقييمات العملاء للخدمة</h2>
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                                {ratings.map(r => (
+                                    <div key={r.id} className="bg-white p-6 rounded-[2.5rem] border border-slate-100 shadow-sm relative group flex flex-col">
+                                        <div className="flex justify-between items-start mb-2">
+                                            <div>
+                                                <div className="font-black text-lg text-slate-800">{r.customerName || 'عميل غير مسجل'}</div>
+                                                <div className="text-xs text-slate-400 font-bold"><Smartphone size={12} className="inline mr-1"/>{r.customerPhone || 'بدون رقم'}</div>
+                                            </div>
+                                            <div className="flex gap-1" dir="ltr">
+                                                {[1,2,3,4,5].map(s => <Star key={s} size={16} fill={r.stars >= s ? "#fbbf24" : "transparent"} color={r.stars >= s ? "#fbbf24" : "#cbd5e1"} />)}
+                                            </div>
+                                        </div>
+                                        <div className="text-[10px] text-slate-400 font-bold mb-4">{r.dateString}</div>
+                                        {r.feedback ? (
+                                            <div className="bg-amber-50 p-4 rounded-2xl text-sm font-bold text-amber-900 border border-amber-100 flex-1 leading-relaxed">
+                                                "{r.feedback}"
+                                            </div>
+                                        ) : (
+                                            <div className="bg-slate-50 p-4 rounded-2xl text-xs font-bold text-slate-400 text-center flex-1 flex items-center justify-center">
+                                                تقييم نجوم بدون مقترح إضافي
+                                            </div>
+                                        )}
+                                    </div>
+                                ))}
+                                {ratings.length === 0 && (
+                                    <div className="col-span-full py-20 text-center text-slate-400">
+                                        <Star size={64} className="mx-auto mb-4 opacity-30"/>
+                                        <p className="font-black text-2xl mb-2">لا توجد تقييمات حتى الآن</p>
+                                        <p className="font-bold">شارك رابط الفواتير مع العملاء لبدء تلقي التقييمات.</p>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    )}
 
                     {tab === 'sales' && (
                         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 animate-in fade-in duration-300">
@@ -1163,7 +1318,7 @@
                                             </button>
                                             <button onClick={() => {
                                                 const itemsStr = order.items.map(i=>`• ${i.name} (x${i.qty}) = ${i.qty*i.currentPrice} ج`).join('\n');
-                                                const msg = `*فاتورة استوديو بولا عماد*\nالعميل: ${order.customerName}\n--------------\n${itemsStr}\n--------------\nالإجمالي: ${order.total} ج\nالمدفوع: ${order.paid} ج\n*الباقي: ${order.remaining} ج*\n${WA_FOOTER}`;
+                                                const msg = `*فاتورة استوديو بولا عماد*\nالعميل: ${order.customerName}\n--------------\n${itemsStr}\n--------------\nالإجمالي: ${order.total} ج\nالمدفوع: ${order.paid} ج\n*الباقي: ${order.remaining} ج*\n${getCustomerFooter(order.customerName, order.customerPhone)}`;
                                                 window.open(`https://wa.me/2${order.customerPhone || ''}?text=${encodeURIComponent(msg)}`, '_blank');
                                             }} className="bg-emerald-50 text-emerald-600 py-3 rounded-xl font-black text-xs flex items-center justify-center gap-2 border border-emerald-100">
                                                 <Send size={14}/> واتساب
@@ -1518,7 +1673,7 @@
                                                     
                                                     <button onClick={() => {
                                                         const itemsStr = order.items.map(i=>`• ${i.name} (x${i.qty}) = ${i.qty*i.currentPrice} ج`).join('\n');
-                                                        const msg = `*استوديو بولا عماد*\nأهلاً بك أ. ${order.customerName}\nبرجاء التفضل باستلام الأوردر الخاص بك وتسديد المديونية في أقرب وقت.\n\n*تفاصيل الأوردر:*\n${itemsStr}\n\n*المبلغ المتبقي لحساب الاستوديو:* ${order.remaining} ج\n${WA_FOOTER}`;
+                                                        const msg = `*استوديو بولا عماد*\nأهلاً بك أ. ${order.customerName}\nبرجاء التفضل باستلام الأوردر الخاص بك وتسديد المديونية في أقرب وقت.\n\n*تفاصيل الأوردر:*\n${itemsStr}\n\n*المبلغ المتبقي لحساب الاستوديو:* ${order.remaining} ج\n${getCustomerFooter(order.customerName, order.customerPhone)}`;
                                                         window.open(`https://wa.me/2${order.customerPhone || ''}?text=${encodeURIComponent(msg)}`, '_blank');
                                                     }} className="w-full md:w-auto bg-emerald-500 hover:bg-emerald-600 text-white px-6 py-3 rounded-xl font-black text-sm flex items-center justify-center gap-2 transition shadow-md whitespace-nowrap">
                                                         <Send size={18}/> إرسال رسالة تذكير
@@ -1856,7 +2011,7 @@
                     {passModal && (
                         <div className="fixed inset-0 bg-black/80 flex items-center justify-center p-4 z-[110]">
                             <div className="bg-white p-8 rounded-[3rem] w-full max-w-sm shadow-2xl relative animate-in zoom-in duration-200 text-center">
-                                <h3 className="text-xl font-black mb-6 text-slate-800">تغيير رقم سري {passModal === 'office' ? 'المكتب' : passModal === 'laser' ? 'الليزر' : 'الخزنة'}</h3>
+                                <h3 className="text-xl font-black mb-6 text-slate-800">تغيير رقم سري {passModal === 'office' ? 'المكتب' : passModal === 'الليزر' ? 'الليزر' : 'الخزنة'}</h3>
                                 <input className="w-full p-4 bg-slate-100 rounded-2xl mb-4 text-center font-black outline-none border-2 border-transparent focus:border-red-500" type="password" placeholder="الرقم السري الحالي" value={passForm.old} onChange={e=>setPassForm({...passForm, old: e.target.value})}/>
                                 <input className="w-full p-4 bg-slate-100 rounded-2xl mb-6 text-center font-black outline-none border-2 border-transparent focus:border-emerald-500" type="text" placeholder="الرقم السري الجديد" value={passForm.new} onChange={e=>setPassForm({...passForm, new: e.target.value})}/>
                                 <div className="flex gap-2">
