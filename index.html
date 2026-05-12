@@ -187,7 +187,6 @@
             initAuth();
             onAuthStateChanged(auth, setUser);
 
-            // Routing Logic for Rating View
             const urlParams = new URLSearchParams(window.location.search);
             if (urlParams.get('view') === 'rating') {
                 setCurrentView('rating');
@@ -478,6 +477,8 @@
             const [isWholesale, setIsWholesale] = useState(false);
             const [selectedWholesaleId, setSelectedWholesaleId] = useState('');
             const [wholesaleSearch, setWholesaleSearch] = useState(''); 
+            
+            const [isWhatsAppSent, setIsWhatsAppSent] = useState(false); // حالة زر إرسال الواتساب للحفظ
 
             const today = new Date().toLocaleDateString('en-CA');
 
@@ -529,14 +530,16 @@
             // --- دوال وتجهيزات رسائل الواتساب الذكية ---
             const getCustomerFooter = (cName, cPhone) => {
                 const isWholesaleCust = customers.some(c => c.name === cName || c.phone === cPhone);
-                const ratingLink = window.location.href.split('?')[0] + "?view=rating&cname=" + encodeURIComponent(cName||'') + "&cphone=" + (cPhone||'');
+                const currentUrl = window.location.href.split('?')[0];
+                const ratingLink = `${currentUrl}?view=rating&cname=${encodeURIComponent(cName||'')}&cphone=${cPhone||''}`;
                 const ratingMsg = `\nمتنساش تقيمنا من خلال الرابط ده عشان تساعدنا فى تطوير خدمتنا ✨👇\n${ratingLink}`;
                 
                 if (isWholesaleCust) {
-                    return ratingMsg; 
+                    return ratingMsg; // لعملاء الجملة التقييم فقط
                 }
                 
-                const retailMarketingMsg = `\nمتنساش تتابع صفحتنا على الفيس بوك ✨👇\nhttps://www.facebook.com/share/18o6vPJTep/\nوخلي المتجر معاك وتابع أقوى الخصومات 🔥😉👇\nhttps://bolaemad524-ux.github.io/matheronline-/?store=store_1773991337877 🔗\n`;
+                // لعملاء القطاعي
+                const retailMarketingMsg = `\nمتنساش تتابع صفحتنا على الفيس بوك ✨👇\nhttps://www.facebook.com/share/18o6vPJTep/\nوخلي المتجر معاك وتابع أقوى الخصومات 🔥😉👇\nhttps://bolaemad524-ux.github.io/matheronline-/?store=store_1773991337877 🔗`;
                 return retailMarketingMsg + ratingMsg;
             };
 
@@ -644,9 +647,8 @@
 
             const handleCheckout = async () => {
                 if(!cart.length) return alert("السلة فارغة");
-                if(!customerName.trim()) return alert("يجب إدخال اسم العميل!");
-                if(!customerPhone.trim()) return alert("يجب إدخال رقم هاتف العميل!");
-                if(!selectedEmployee) return alert("يجب اختيار اسم الموظف!");
+                if(!customerName.trim() || !customerPhone.trim() || !selectedEmployee) return alert("يرجى إدخال جميع البيانات (الاسم، الهاتف، الموظف)!");
+                if(!isWhatsAppSent) return alert("يجب إرسال الفاتورة للعميل عبر واتساب أولاً لحفظها!");
 
                 const subTotal = cart.reduce((a,b)=>a+(b.currentPrice*b.qty),0);
                 const discountVal = parseFloat(discount) || 0;
@@ -673,9 +675,11 @@
                 for(let i of cart) {
                     if(!i.isPrinting) await updateDoc(doc(db,'artifacts',appId,'public','data','inventory',i.id), {stock: increment(-i.qty)});
                 }
-                setCart([]); setAmountPaid(''); setDiscount(''); setCustomerName(''); setCustomerPhone(''); setSelectedWholesaleId(''); setSelectedEmployee(''); 
                 
-                // رسالة تأكيد بسيطة غير مزعجة بدل الـ alert اللي بيبوظ المتصفح
+                setCart([]); setAmountPaid(''); setDiscount(''); setCustomerName(''); setCustomerPhone(''); setSelectedWholesaleId(''); setSelectedEmployee(''); 
+                setIsWhatsAppSent(false); // إعادة القفل للفاتورة القادمة
+                
+                // رسالة تأكيد شيك بديلة
                 const successDiv = document.createElement('div');
                 successDiv.innerHTML = '<div style="position:fixed;top:20px;left:50%;transform:translateX(-50%);background:#10b981;color:white;padding:15px 30px;border-radius:12px;font-weight:bold;z-index:9999;box-shadow:0 10px 25px rgba(0,0,0,0.2);animation:slideDown 0.5s ease;">تم حفظ الفاتورة بنجاح ✅</div>';
                 document.body.appendChild(successDiv);
@@ -727,6 +731,7 @@
                     if (activeCustomer && (activeCustomer.walletBalance || 0) > 0) {
                         msg += `*رصيد محفظتك لدينا:* ${activeCustomer.walletBalance} ج\n`;
                     }
+
                     msg += getCustomerFooter(customerName, customerPhone);
 
                 } else {
@@ -734,6 +739,7 @@
                 }
                 
                 window.open(`https://wa.me/2${customerPhone}?text=${encodeURIComponent(msg)}`, '_blank');
+                setIsWhatsAppSent(true); // فتح قفل زر الحفظ
             };
 
             const executeQuickPay = async (method) => {
@@ -766,10 +772,12 @@
 
                 try {
                     const batch = writeBatch(db);
+                    
                     const custRef = doc(db, 'artifacts', appId, 'public', 'data', 'wholesale_customers', customerDetailsModal.id);
                     batch.update(custRef, {
                         walletBalance: increment(amount)
                     });
+
                     const paymentRef = doc(collection(db, 'artifacts', appId, 'public', 'data', 'debt_payments'));
                     batch.set(paymentRef, {
                         customerName: customerDetailsModal.name,
@@ -781,6 +789,7 @@
                     });
 
                     await batch.commit();
+                    
                     setCustomerDetailsModal(prev => ({...prev, walletBalance: (prev.walletBalance || 0) + amount}));
                     setCustomerPayAmount('');
                 } catch(e) { console.error(e); }
@@ -824,7 +833,9 @@
                     });
 
                     await batch.commit();
-                } catch(e) { console.error(e); }
+                } catch(e) {
+                    console.error(e); alert("حدث خطأ");
+                }
             };
             
             const handlePaySingleOrderInsideModal = (order, method) => {
@@ -872,7 +883,9 @@
 
                     await batch.commit();
                     setSingleOrderPayConfirm(null);
-                } catch(e) { console.error(e); }
+                } catch(e) { 
+                    console.error(e);
+                }
             };
 
             const sendFullCustomerStatement = () => {
@@ -899,11 +912,13 @@
                 if(totalDebt > 0) {
                     msg += `*إجمالي المديونية الحالية:* ${totalDebt} ج\n`;
                 }
+                
                 if ((activeCustomer.walletBalance || 0) > 0) {
                     msg += `*رصيد محفظتك لدينا:* ${activeCustomer.walletBalance} ج\n`;
                 }
 
                 msg += getCustomerFooter(activeCustomer.name, activeCustomer.phone);
+
                 window.open(`https://wa.me/2${activeCustomer.phone}?text=${encodeURIComponent(msg)}`, '_blank');
             };
 
@@ -913,6 +928,7 @@
 
                 try {
                     const orderId = deleteConfirmModal.id;
+                    
                     await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'deleted_logs'), {
                         orderId: orderId,
                         customerName: deleteConfirmModal.customerName,
@@ -924,12 +940,18 @@
 
                     const q = query(collection(db, 'artifacts', appId, 'public', 'data', 'debt_payments'), where('orderId', '==', orderId));
                     const snapshot = await getDocs(q);
+                    
                     const deletePromises = snapshot.docs.map(d => deleteDoc(d.ref));
                     await Promise.all(deletePromises);
+            
                     await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'orders', orderId));
+                    
                     setDeleteConfirmModal(null);
                     setDeleteReason(''); 
-                } catch(e) { console.error(e); }
+                } catch(e) {
+                    console.error(e);
+                    setDeleteConfirmModal(null);
+                }
             };
 
             const handleUpdateOrder = async () => {
@@ -1209,11 +1231,17 @@
                                          </select>
                                      </div>
 
-                                     <div className="flex gap-2">
+                                     <div className="flex gap-2 mb-2">
                                         <button onClick={()=>setPaymentMethod('cash')} className={`flex-1 py-2 rounded-lg text-xs font-black ${paymentMethod==='cash'?'bg-emerald-600 text-white shadow-md':'bg-slate-100'}`}>نقدي</button>
                                         <button onClick={()=>setPaymentMethod('wallet')} className={`flex-1 py-2 rounded-lg text-xs font-black ${paymentMethod==='wallet'?'bg-blue-600 text-white shadow-md':'bg-slate-100'}`}>محفظة</button>
                                      </div>
-                                     <button onClick={handleCheckout} className="w-full bg-emerald-600 text-white py-4 rounded-2xl font-black shadow-xl hover:bg-emerald-700 transition">حفظ الفاتورة</button>
+                                     <button 
+                                        onClick={handleCheckout} 
+                                        disabled={!isWhatsAppSent}
+                                        className={`w-full py-4 rounded-2xl font-black shadow-xl transition ${isWhatsAppSent ? 'bg-emerald-600 text-white hover:bg-emerald-700' : 'bg-slate-200 text-slate-400 cursor-not-allowed'}`}
+                                     >
+                                        {isWhatsAppSent ? 'حفظ الفاتورة ✅' : 'أرسل الواتساب أولاً للحفظ'}
+                                     </button>
                                 </div>
                             </div>
                         </div>
