@@ -565,6 +565,7 @@
                 setCart([]); setAmountPaid(''); setDiscount(''); setCustomerName(''); setCustomerPhone(''); setSelectedWholesaleId(''); setSelectedEmployee(''); 
             };
             
+            // الزرار الذكي الجديد لإرسال رسالة الواتساب للعميل القطاعي أو الجملة بكامل حساباته
             const handleSendSalesWhatsApp = () => {
                 if(!cart.length) return alert("السلة فارغة، لا يوجد شيء لإرساله!");
                 if(!customerName.trim()) return alert("يجب إدخال اسم العميل!");
@@ -574,11 +575,51 @@
                 const discountVal = parseFloat(discount) || 0;
                 const total = Math.max(0, subTotal - discountVal); 
                 const paid = parseFloat(amountPaid)||0;
-                const remaining = total - paid;
+                const currentRemaining = total - paid;
 
-                const itemsStr = cart.map(i=>`• ${i.name} (x${i.qty}) = ${i.qty*i.currentPrice} ج`).join('\n');
+                const currentItemsStr = cart.map(i=>`• ${i.name} (x${i.qty}) = ${i.qty*i.currentPrice} ج`).join('\n');
                 
-                const msg = `*فاتورة استوديو بولا عماد*\nالعميل: ${customerName}\n--------------\n${itemsStr}\n--------------\nالإجمالي: ${total} ج\nالمدفوع: ${paid} ج\n*الباقي: ${remaining} ج*\n${WA_FOOTER}`;
+                let msg = '';
+
+                // إذا كان عميل جملة ومختار من القائمة
+                if (isWholesale && selectedWholesaleId) {
+                    const activeCustomer = customers.find(c => c.id === selectedWholesaleId);
+                    const unpaidOrders = orders.filter(o => (o.customerId === selectedWholesaleId || o.customerName === customerName) && o.remaining > 0).sort((a,b) => (b.createdAt?.seconds||0) - (a.createdAt?.seconds||0));
+                    const previousDebt = unpaidOrders.reduce((s,o)=>s+o.remaining,0);
+                    
+                    msg = `*كشف حساب وفاتورة استوديو بولا عماد*\nالعميل: ${customerName}\n================\n\n`;
+                    
+                    msg += `*📦 تفاصيل أوردر اليوم:*\n${currentItemsStr}\n`;
+                    msg += `الإجمالي: ${total} ج | المدفوع: ${paid} ج | *الباقي: ${currentRemaining} ج*\n\n`;
+                    
+                    if (unpaidOrders.length > 0) {
+                        msg += `================\n*🧾 الفواتير السابقة المعلقة:*\n\n`;
+                        unpaidOrders.forEach((o) => {
+                            msg += `*فاتورة (${o.dateString}):*\n`;
+                            o.items.forEach(item => {
+                                msg += `- ${item.name} (x${item.qty}) = ${item.qty * item.currentPrice}ج\n`;
+                            });
+                            msg += `*الباقي من الفاتورة: ${o.remaining} ج*\n\n`;
+                        });
+                    }
+                    
+                    const totalDebtIncludingCurrent = previousDebt + currentRemaining;
+                    msg += `================\n`;
+                    if (previousDebt > 0) {
+                        msg += `*إجمالي المديونيات السابقة:* ${previousDebt} ج\n`;
+                    }
+                    msg += `*إجمالي المديونية الكلية (القديم + الجديد):* ${totalDebtIncludingCurrent} ج\n`;
+                    
+                    if (activeCustomer && (activeCustomer.walletBalance || 0) > 0) {
+                        msg += `*رصيد محفظتك لدينا:* ${activeCustomer.walletBalance} ج\n`;
+                    }
+
+                    msg += WA_FOOTER;
+
+                } else {
+                    // عميل قطاعي عادي أو عميل لم يتم تسجيله
+                    msg = `*فاتورة استوديو بولا عماد*\nالعميل: ${customerName}\n--------------\n${currentItemsStr}\n--------------\nالإجمالي: ${total} ج\nالمدفوع: ${paid} ج\n*الباقي: ${currentRemaining} ج*\n${WA_FOOTER}`;
+                }
                 
                 window.open(`https://wa.me/2${customerPhone}?text=${encodeURIComponent(msg)}`, '_blank');
             };
@@ -603,7 +644,6 @@
                 } catch(e) { alert("حدث خطأ"); }
             };
             
-            // اصلاح مشكلة db.batch() واستخدام writeBatch(db) الصحيحة
             const handleAddCustomerWallet = async (method) => {
                 let amount = parseFloat(customerPayAmount);
                 if(!amount || amount <= 0) return;
@@ -633,7 +673,6 @@
                 } catch(e) { console.error(e); alert("حدث خطأ أثناء الإيداع!"); }
             };
 
-            // اصلاح مشكلة db.batch() واستخدام writeBatch(db) الصحيحة
             const handlePayCustomerDebtFromWallet = async () => {
                 const activeCustomer = customers.find(c => c.id === customerDetailsModal.id) || customerDetailsModal;
                 const custOrders = orders.filter(o => (o.customerId === activeCustomer.id || o.customerName === activeCustomer.name) && o.remaining > 0).sort((a,b) => (a.createdAt?.seconds||0) - (b.createdAt?.seconds||0));
@@ -646,7 +685,6 @@
 
                 const amountToPay = Math.min(totalDebt, currentWallet);
 
-                // استخدام نافذة المتصفح العادية هنا لأنها عملية نادرة (سداد جميع الديون مرة واحدة)
                 if(!window.confirm(`سيتم خصم ${amountToPay} ج من محفظة العميل لسداد المديونيات. تأكيد؟`)) return;
 
                 try {
@@ -678,7 +716,6 @@
                 }
             };
             
-            // فتح نافذة التأكيد الاحترافية بدلاً من alert المتصفح المزعج
             const handlePaySingleOrderInsideModal = (order, method) => {
                 const activeCustomer = customers.find(c => c.id === customerDetailsModal.id) || customerDetailsModal;
                 if (method === 'customer_wallet' && (activeCustomer.walletBalance || 0) <= 0) {
@@ -687,7 +724,6 @@
                 setSingleOrderPayConfirm({order, method});
             };
 
-            // تنفيذ الدفع بعد تأكيد الشاشة الاحترافية
             const executeSingleOrderPayInsideModal = async () => {
                 if(!singleOrderPayConfirm) return;
                 const { order, method } = singleOrderPayConfirm;
@@ -699,7 +735,7 @@
                 }
 
                 try {
-                    const batch = writeBatch(db); // استخدام الدالة الصحيحة لنسخة فايربيز 9
+                    const batch = writeBatch(db); 
                     const orderRef = doc(db, 'artifacts', appId, 'public', 'data', 'orders', order.id);
                     batch.update(orderRef, {
                         paid: increment(amountToPay),
