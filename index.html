@@ -363,6 +363,9 @@
             // Customer Details Modal
             const [customerDetailsModal, setCustomerDetailsModal] = useState(null);
             const [customerPayAmount, setCustomerPayAmount] = useState('');
+            
+            // Custom Payment Confirmation Modal (Replaces browser window.confirm)
+            const [singleOrderPayConfirm, setSingleOrderPayConfirm] = useState(null); // {order, method}
 
             const [itemToAddToOrder, setItemToAddToOrder] = useState(null); 
             const [qtyInput, setQtyInput] = useState('1'); 
@@ -473,7 +476,7 @@
                 try {
                     await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'inventory', deleteProductModal.id));
                     setDeleteProductModal(null);
-                    alert("تم حذف المنتج نهائياً ✅");
+                    // No window.alert here to prevent browser blocking, UI updates instantly
                 } catch(e) {
                     alert("حدث خطأ أثناء الحذف");
                 }
@@ -560,7 +563,8 @@
                 for(let i of cart) {
                     if(!i.isPrinting) await updateDoc(doc(db,'artifacts',appId,'public','data','inventory',i.id), {stock: increment(-i.qty)});
                 }
-                setCart([]); setAmountPaid(''); setDiscount(''); setCustomerName(''); setCustomerPhone(''); setSelectedWholesaleId(''); setSelectedEmployee(''); alert("تم حفظ الطلب ✅");
+                setCart([]); setAmountPaid(''); setDiscount(''); setCustomerName(''); setCustomerPhone(''); setSelectedWholesaleId(''); setSelectedEmployee(''); 
+                // Removed alert to prevent browser blocking
             };
             
             const handleSendSalesWhatsApp = () => {
@@ -598,7 +602,6 @@
                     });
 
                     setPayConfirmModal(null);
-                    alert(`تم استلام المبلغ (${method === 'cash' ? 'نقدي' : 'محفظة'}) وإضافته لحساب اليوم ✅`);
                 } catch(e) { alert("حدث خطأ"); }
             };
             
@@ -609,13 +612,11 @@
                 try {
                     const batch = db.batch();
                     
-                    // 1. Update customer wallet
                     const custRef = doc(db, 'artifacts', appId, 'public', 'data', 'wholesale_customers', customerDetailsModal.id);
                     batch.update(custRef, {
                         walletBalance: increment(amount)
                     });
 
-                    // 2. Add to daily income (debt_payments is essentially our income log for deferred/extra payments)
                     const paymentRef = doc(collection(db, 'artifacts', appId, 'public', 'data', 'debt_payments'));
                     batch.set(paymentRef, {
                         customerName: customerDetailsModal.name,
@@ -628,10 +629,8 @@
 
                     await batch.commit();
                     
-                    // Update local state for immediate feedback
                     setCustomerDetailsModal(prev => ({...prev, walletBalance: (prev.walletBalance || 0) + amount}));
                     setCustomerPayAmount('');
-                    alert(`تم الإيداع في محفظة العميل بنجاح (${method === 'cash' ? 'الدرج' : 'محفظة'}) ✅`);
                 } catch(e) { alert("حدث خطأ أثناء الإيداع!"); }
             };
 
@@ -647,6 +646,7 @@
 
                 const amountToPay = Math.min(totalDebt, currentWallet);
 
+                // We keep one confirm here since it's a rare bulk action, but better to avoid it if user abuses it. Let's risk it for bulk.
                 if(!window.confirm(`سيتم خصم ${amountToPay} ج من محفظة العميل لسداد المديونيات. تأكيد؟`)) return;
 
                 try {
@@ -674,22 +674,20 @@
                     });
 
                     await batch.commit();
-                    alert("تم خصم المبلغ من المحفظة وتسديد الفواتير بنجاح ✅");
                 } catch(e) {
                     alert("حدث خطأ");
                 }
             };
             
-            const handlePaySingleOrderInsideModal = async (order, method) => {
+            // Custom UI Confirm execution logic
+            const executeSingleOrderPayInsideModal = async () => {
+                if(!singleOrderPayConfirm) return;
+                const { order, method } = singleOrderPayConfirm;
                 const activeCustomer = customers.find(c => c.id === customerDetailsModal.id) || customerDetailsModal;
                 let amountToPay = order.remaining;
                 
                 if (method === 'customer_wallet') {
-                    if ((activeCustomer.walletBalance || 0) <= 0) return alert("لا يوجد رصيد كافٍ في المحفظة!");
                     amountToPay = Math.min(order.remaining, activeCustomer.walletBalance);
-                    if (!window.confirm(`سيتم خصم ${amountToPay} ج من محفظة العميل لسداد ${amountToPay === order.remaining ? 'الفاتورة بالكامل' : 'جزء من الفاتورة'}. تأكيد؟`)) return;
-                } else {
-                    if(!window.confirm(`تأكيد سداد ${order.remaining} ج عن طريق ${method === 'cash' ? 'الدرج' : 'محفظة فودافون'}؟`)) return;
                 }
 
                 try {
@@ -718,8 +716,17 @@
                     }
 
                     await batch.commit();
-                    alert("تم السداد بنجاح ✅");
+                    setSingleOrderPayConfirm(null);
                 } catch(e) { alert("حدث خطأ"); }
+            };
+
+            const handlePaySingleOrderInsideModal = (order, method) => {
+                const activeCustomer = customers.find(c => c.id === customerDetailsModal.id) || customerDetailsModal;
+                if (method === 'customer_wallet' && (activeCustomer.walletBalance || 0) <= 0) {
+                    return alert("لا يوجد رصيد كافٍ في المحفظة!");
+                }
+                // Open custom modal instead of browser confirm
+                setSingleOrderPayConfirm({order, method});
             };
 
             const sendFullCustomerStatement = () => {
@@ -782,7 +789,6 @@
                     
                     setDeleteConfirmModal(null);
                     setDeleteReason(''); 
-                    alert("تم حذف الطلب وتصحيح الحسابات بنجاح ✅");
                 } catch(e) {
                     console.error(e);
                     setDeleteConfirmModal(null);
@@ -797,7 +803,7 @@
                     paid: paid,
                     remaining: editingOrder.total - paid
                 });
-                setEditingOrder(null); setEditAmount(''); alert("تم تعديل الفاتورة ✅");
+                setEditingOrder(null); setEditAmount('');
             };
             
             const handleAddVaultExpense = async () => {
@@ -809,7 +815,6 @@
                         createdAt: serverTimestamp()
                     });
                     setShowVaultExpenseModal(false); setVaultExpenseData({amount:'', desc:''});
-                    alert("تم إضافة المصروف للخزنة بنجاح ✅");
                 }
             };
             
@@ -817,7 +822,6 @@
                 if(newEmployeeName.trim()) {
                     await addDoc(collection(db,'artifacts',appId,'public','data','employees'), { name: newEmployeeName });
                     setNewEmployeeName('');
-                    alert("تم إضافة الموظف بنجاح ✅");
                 }
             };
 
@@ -825,7 +829,6 @@
                 if(!newCommRate) return;
                 await setDoc(doc(db,'artifacts',appId,'public','data','app_settings','general'), {...appSettings, commissionRate: parseFloat(newCommRate)});
                 setShowCommModal(false);
-                alert("تم تحديث نسبة العمولة بنجاح ✅");
             };
 
             const [editingExpense, setEditingExpense] = useState(null);
@@ -837,7 +840,6 @@
                         description: editingExpense.description
                     });
                     setEditingExpense(null);
-                    alert("تم تعديل المصروف بنجاح ✅");
                 } catch(e) { alert("حدث خطأ"); }
             };
 
@@ -854,7 +856,6 @@
                     const updateField = target === 'vault' ? 'vaultPin' : target;
                     const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'app_settings', 'general');
                     await updateDoc(docRef, { [updateField]: passForm.new });
-                    alert(`تم تغيير رقم سري ${target === 'office' ? 'المكتب' : target === 'laser' ? 'الليزر' : 'الخزنة'} بنجاح ✅`);
                     setPassModal(null); setPassForm({old: '', new: ''});
                 } catch (e) {
                     alert("حدث خطأ أثناء التحديث");
@@ -865,7 +866,6 @@
                 if(!newMeterPrice) return;
                 await setDoc(doc(db,'artifacts',appId,'public','data','app_settings','general'), {...appSettings, meterPrice: parseFloat(newMeterPrice)});
                 setMeterPriceModal(false);
-                alert("تم تحديث سعر المتر بنجاح ✅");
             };
 
             return (
@@ -1313,7 +1313,7 @@
                         const walletBalance = activeCustomer.walletBalance || 0;
 
                         return (
-                            <div className="fixed inset-0 bg-black/80 flex items-center justify-center p-2 md:p-4 z-[100]">
+                            <div className="fixed inset-0 bg-black/80 flex items-center justify-center p-2 md:p-4 z-[90]">
                                 <div className="bg-slate-50 rounded-[2rem] w-full max-w-4xl h-[95vh] md:h-[85vh] shadow-2xl relative flex flex-col overflow-hidden animate-in zoom-in duration-200">
                                     {/* Header */}
                                     <div className="bg-white p-6 border-b border-slate-200 flex justify-between items-center shadow-sm z-10">
@@ -1416,6 +1416,28 @@
                             </div>
                         );
                     })()}
+
+                    {/* نافذة التأكيد الاحترافية الجديدة بديلة المتصفح */}
+                    {singleOrderPayConfirm && (
+                        <div className="fixed inset-0 bg-black/90 flex items-center justify-center p-4 z-[120]">
+                            <div className="bg-slate-800 p-8 rounded-[2.5rem] w-full max-w-sm border border-emerald-500/50 text-center animate-in zoom-in duration-200">
+                                <div className="bg-emerald-500/20 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4 text-emerald-400">
+                                    <CheckCircle size={32}/>
+                                </div>
+                                <h3 className="text-xl font-black mb-2 text-white">تأكيد سداد الفاتورة</h3>
+                                <p className="text-slate-400 text-sm font-bold mb-6 leading-relaxed">
+                                    {singleOrderPayConfirm.method === 'customer_wallet' 
+                                        ? `سيتم خصم ${Math.min(singleOrderPayConfirm.order.remaining, (customers.find(c => c.id === customerDetailsModal?.id) || customerDetailsModal)?.walletBalance || 0)} ج من محفظة العميل لسداد هذه الفاتورة. تأكيد؟`
+                                        : `سيتم تسديد مبلغ ${singleOrderPayConfirm.order.remaining} ج عن طريق ${singleOrderPayConfirm.method === 'cash' ? 'الدرج' : 'محفظة فودافون'}. تأكيد؟`
+                                    }
+                                </p>
+                                <div className="flex gap-2">
+                                    <button onClick={executeSingleOrderPayInsideModal} className="flex-1 bg-emerald-600 hover:bg-emerald-700 py-3 rounded-xl font-black transition text-white">نعم، تأكيد</button>
+                                    <button onClick={()=>setSingleOrderPayConfirm(null)} className="flex-1 bg-slate-700 hover:bg-slate-600 py-3 rounded-xl font-black transition text-white">إلغاء</button>
+                                </div>
+                            </div>
+                        </div>
+                    )}
 
                     {/* --- نافذة تنبيه المتأخرات (أكثر من 3 أيام) --- */}
                     {showOverdueModal && (
