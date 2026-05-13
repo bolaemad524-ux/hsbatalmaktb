@@ -5,10 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>نظام استوديو بولا V23.2</title>
     
-    <!-- تحميل تصميم Tailwind -->
     <script src="https://cdn.tailwindcss.com"></script>
     
-    <!-- تحميل مترجم React للمتصفح -->
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
     
     <style>
@@ -18,7 +16,6 @@
         body { font-family: system-ui, -apple-system, sans-serif; }
     </style>
 
-    <!-- خريطة المكاتب لجلب React و Firebase مباشرة من السيرفر -->
     <script type="importmap">
     {
       "imports": {
@@ -40,7 +37,6 @@
         </div>
     </div>
 
-    <!-- كود البرنامج (React) -->
     <script type="text/babel" data-type="module">
         import React, { useState, useEffect, useMemo } from 'react';
         import { createRoot } from 'react-dom/client';
@@ -70,6 +66,9 @@
         const app = initializeApp(firebaseConfig);
         const auth = getAuth(app);
         const db = getFirestore(app);
+
+        // النص التسويقي الثابت في أسفل الفواتير
+        const WA_FOOTER = `\nمتنساش تتابع صفحتنا على الفيس بوك ✨👇\nhttps://www.facebook.com/share/18o6vPJTep/\nوخلي المتجر معاك وتابع أقوى الخصومات 🔥😉👇\nhttps://bolaemad524-ux.github.io/matheronline-/?store=store_1773991337877 🔗`;
 
         // =====================================================================
         // === شاشة التقييم المخصصة للعملاء ===
@@ -438,7 +437,7 @@
             const [editAmount, setEditAmount] = useState('');
             const [deleteReason, setDeleteReason] = useState(''); 
             
-            // Modals
+            // Modals & Tracking
             const [showAddItem, setShowAddItem] = useState(false);
             const [editingStockItem, setEditingStockItem] = useState(null);
             const [newStockValue, setNewStockValue] = useState('');
@@ -454,22 +453,19 @@
             const [newEmployeeName, setNewEmployeeName] = useState(''); 
             const [showCommModal, setShowCommModal] = useState(false); 
             const [newCommRate, setNewCommRate] = useState('');
-            
             const [showExpensesListModal, setShowExpensesListModal] = useState(false);
-            
-            // Customer Details Modal
             const [customerDetailsModal, setCustomerDetailsModal] = useState(null);
             const [customerPayAmount, setCustomerPayAmount] = useState('');
-            
-            // Custom Payment Confirmation Modal
             const [singleOrderPayConfirm, setSingleOrderPayConfirm] = useState(null); 
-
             const [itemToAddToOrder, setItemToAddToOrder] = useState(null); 
             const [qtyInput, setQtyInput] = useState('1'); 
-            
             const [printModalItem, setPrintModalItem] = useState(null);
             const [printDims, setPrintDims] = useState({l: '', w: ''});
             const [printCount, setPrintCount] = useState('1'); 
+
+            // Edit existing order from 'orders' tab
+            const [editingOrderId, setEditingOrderId] = useState(null);
+            const [originalOrderItems, setOriginalOrderItems] = useState([]);
 
             const [reportYear, setReportYear] = useState(new Date().getFullYear().toString());
             const [expandedMonth, setExpandedMonth] = useState(null);
@@ -478,7 +474,7 @@
             const [selectedWholesaleId, setSelectedWholesaleId] = useState('');
             const [wholesaleSearch, setWholesaleSearch] = useState(''); 
             
-            const [isWhatsAppSent, setIsWhatsAppSent] = useState(false); // حالة زر إرسال الواتساب للحفظ
+            const [isWhatsAppSent, setIsWhatsAppSent] = useState(false);
 
             const today = new Date().toLocaleDateString('en-CA');
 
@@ -527,7 +523,6 @@
             };
             const overdueOrdersList = getOverdueOrders();
 
-            // --- دوال وتجهيزات رسائل الواتساب الذكية ---
             const getCustomerFooter = (cName, cPhone) => {
                 const isWholesaleCust = customers.some(c => c.name === cName || c.phone === cPhone);
                 const currentUrl = window.location.href.split('?')[0];
@@ -535,10 +530,9 @@
                 const ratingMsg = `\nمتنساش تقيمنا من خلال الرابط ده عشان تساعدنا فى تطوير خدمتنا ✨👇\n${ratingLink}`;
                 
                 if (isWholesaleCust) {
-                    return ratingMsg; // لعملاء الجملة التقييم فقط
+                    return ratingMsg; 
                 }
                 
-                // لعملاء القطاعي
                 const retailMarketingMsg = `\nمتنساش تتابع صفحتنا على الفيس بوك ✨👇\nhttps://www.facebook.com/share/18o6vPJTep/\nوخلي المتجر معاك وتابع أقوى الخصومات 🔥😉👇\nhttps://bolaemad524-ux.github.io/matheronline-/?store=store_1773991337877 🔗`;
                 return retailMarketingMsg + ratingMsg;
             };
@@ -645,6 +639,32 @@
                 setQtyInput('1');
             };
 
+            const resetSalesTab = () => {
+                setCart([]); setAmountPaid(''); setDiscount(''); setCustomerName(''); 
+                setCustomerPhone(''); setSelectedWholesaleId(''); setSelectedEmployee(''); 
+                setIsWhatsAppSent(false); setEditingOrderId(null); setOriginalOrderItems([]);
+            };
+
+            const handleEditOrderInSales = (order) => {
+                setCart(order.items);
+                setCustomerName(order.customerName);
+                setCustomerPhone(order.customerPhone || '');
+                setAmountPaid(order.paid);
+                setDiscount(order.discount || '');
+                setSelectedEmployee(order.employeeName || '');
+                if (order.customerId) {
+                    setIsWholesale(true);
+                    setSelectedWholesaleId(order.customerId);
+                } else {
+                    setIsWholesale(false);
+                    setSelectedWholesaleId('');
+                }
+                setEditingOrderId(order.id);
+                setOriginalOrderItems(order.items);
+                setIsWhatsAppSent(false);
+                setTab('sales');
+            };
+
             const handleCheckout = async () => {
                 if(!cart.length) return alert("السلة فارغة");
                 if(!customerName.trim() || !customerPhone.trim() || !selectedEmployee) return alert("يرجى إدخال جميع البيانات (الاسم، الهاتف، الموظف)!");
@@ -655,35 +675,61 @@
                 const total = Math.max(0, subTotal - discountVal); 
                 const paid = parseFloat(amountPaid)||0;
 
-                await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'orders'), {
-                    items: cart, 
-                    subTotal, 
-                    discount: discountVal,
-                    total, 
-                    paid, 
-                    remaining: total-paid, 
-                    initialPaid: paid, 
-                    customerName, 
-                    customerPhone, 
-                    employeeName: selectedEmployee, 
-                    paymentMethod,
-                    customerId: selectedWholesaleId || null,
-                    dateString: today, monthString: today.slice(0, 7),
-                    createdAt: serverTimestamp()
-                });
-                
-                for(let i of cart) {
-                    if(!i.isPrinting) await updateDoc(doc(db,'artifacts',appId,'public','data','inventory',i.id), {stock: increment(-i.qty)});
+                const batch = writeBatch(db);
+
+                if (editingOrderId) {
+                    const orderRef = doc(db, 'artifacts', appId, 'public', 'data', 'orders', editingOrderId);
+                    batch.update(orderRef, {
+                        items: cart, subTotal, discount: discountVal, total, paid, remaining: total-paid,
+                        customerName, customerPhone, employeeName: selectedEmployee, paymentMethod, customerId: selectedWholesaleId || null
+                    });
+
+                    // إرجاع المخزون القديم
+                    for(let i of originalOrderItems) {
+                        if(!i.isPrinting && i.id) {
+                            const itemRef = doc(db, 'artifacts', appId, 'public', 'data', 'inventory', i.id);
+                            batch.update(itemRef, { stock: increment(i.qty) });
+                        }
+                    }
+                    // خصم المخزون الجديد
+                    for(let i of cart) {
+                        if(!i.isPrinting && i.id) {
+                            const itemRef = doc(db, 'artifacts', appId, 'public', 'data', 'inventory', i.id);
+                            batch.update(itemRef, { stock: increment(-i.qty) });
+                        }
+                    }
+
+                    await batch.commit();
+                    resetSalesTab();
+                    
+                    const successDiv = document.createElement('div');
+                    successDiv.innerHTML = '<div style="position:fixed;top:20px;left:50%;transform:translateX(-50%);background:#10b981;color:white;padding:15px 30px;border-radius:12px;font-weight:bold;z-index:9999;box-shadow:0 10px 25px rgba(0,0,0,0.2);animation:slideDown 0.5s ease;">تم تحديث الفاتورة بنجاح ✅</div>';
+                    document.body.appendChild(successDiv);
+                    setTimeout(() => { document.body.removeChild(successDiv); }, 3000);
+
+                } else {
+                    const newOrderRef = doc(collection(db, 'artifacts', appId, 'public', 'data', 'orders'));
+                    batch.set(newOrderRef, {
+                        items: cart, subTotal, discount: discountVal, total, paid, remaining: total-paid, initialPaid: paid, 
+                        customerName, customerPhone, employeeName: selectedEmployee, paymentMethod, customerId: selectedWholesaleId || null,
+                        dateString: today, monthString: today.slice(0, 7), createdAt: serverTimestamp()
+                    });
+                    
+                    for(let i of cart) {
+                        if(!i.isPrinting && i.id) {
+                            const itemRef = doc(db, 'artifacts', appId, 'public', 'data', 'inventory', i.id);
+                            batch.update(itemRef, { stock: increment(-i.qty) });
+                        }
+                    }
+                    
+                    await batch.commit();
+                    resetSalesTab();
+                    
+                    const successDiv = document.createElement('div');
+                    successDiv.innerHTML = '<div style="position:fixed;top:20px;left:50%;transform:translateX(-50%);background:#10b981;color:white;padding:15px 30px;border-radius:12px;font-weight:bold;z-index:9999;box-shadow:0 10px 25px rgba(0,0,0,0.2);animation:slideDown 0.5s ease;">تم حفظ الفاتورة بنجاح ✅</div>';
+                    document.body.appendChild(successDiv);
+                    setTimeout(() => { document.body.removeChild(successDiv); }, 3000);
                 }
-                
-                setCart([]); setAmountPaid(''); setDiscount(''); setCustomerName(''); setCustomerPhone(''); setSelectedWholesaleId(''); setSelectedEmployee(''); 
-                setIsWhatsAppSent(false); // إعادة القفل للفاتورة القادمة
-                
-                // رسالة تأكيد شيك بديلة
-                const successDiv = document.createElement('div');
-                successDiv.innerHTML = '<div style="position:fixed;top:20px;left:50%;transform:translateX(-50%);background:#10b981;color:white;padding:15px 30px;border-radius:12px;font-weight:bold;z-index:9999;box-shadow:0 10px 25px rgba(0,0,0,0.2);animation:slideDown 0.5s ease;">تم حفظ الفاتورة بنجاح ✅</div>';
-                document.body.appendChild(successDiv);
-                setTimeout(() => { document.body.removeChild(successDiv); }, 3000);
             };
             
             const handleSendSalesWhatsApp = () => {
@@ -703,7 +749,13 @@
 
                 if (isWholesale && selectedWholesaleId) {
                     const activeCustomer = customers.find(c => c.id === selectedWholesaleId);
-                    const unpaidOrders = orders.filter(o => (o.customerId === selectedWholesaleId || o.customerName === customerName) && o.remaining > 0).sort((a,b) => (b.createdAt?.seconds||0) - (a.createdAt?.seconds||0));
+                    // لو بنعدل فاتورة، هنستثنيها من المديونية القديمة عشان متبقاش متكررة
+                    let unpaidOrders = orders.filter(o => (o.customerId === selectedWholesaleId || o.customerName === customerName) && o.remaining > 0);
+                    if(editingOrderId) {
+                        unpaidOrders = unpaidOrders.filter(o => o.id !== editingOrderId);
+                    }
+                    unpaidOrders = unpaidOrders.sort((a,b) => (b.createdAt?.seconds||0) - (a.createdAt?.seconds||0));
+                    
                     const previousDebt = unpaidOrders.reduce((s,o)=>s+o.remaining,0);
                     
                     msg = `*كشف حساب وفاتورة استوديو بولا عماد*\nالعميل: ${customerName}\n================\n\n`;
@@ -739,7 +791,7 @@
                 }
                 
                 window.open(`https://wa.me/2${customerPhone}?text=${encodeURIComponent(msg)}`, '_blank');
-                setIsWhatsAppSent(true); // فتح قفل زر الحفظ
+                setIsWhatsAppSent(true); 
             };
 
             const executeQuickPay = async (method) => {
@@ -792,7 +844,7 @@
                     
                     setCustomerDetailsModal(prev => ({...prev, walletBalance: (prev.walletBalance || 0) + amount}));
                     setCustomerPayAmount('');
-                } catch(e) { console.error(e); }
+                } catch(e) { console.error(e); alert("حدث خطأ أثناء الإيداع!"); }
             };
 
             const handlePayCustomerDebtFromWallet = async () => {
@@ -1191,6 +1243,14 @@
                             
                             <div className="bg-white p-6 rounded-[2.5rem] shadow-xl border border-emerald-50 h-fit sticky top-6">
                                 <h3 className="font-black mb-4 flex items-center gap-2"><ShoppingCart size={18}/> السلة ({isWholesale ? 'جملة' : 'قطاعي'})</h3>
+                                
+                                {editingOrderId && (
+                                    <div className="bg-indigo-100 text-indigo-800 p-3 rounded-xl mb-4 text-xs font-black flex justify-between items-center border border-indigo-200">
+                                        <span className="flex items-center gap-2"><Edit size={16}/> وضع تعديل/إضافة للفاتورة</span>
+                                        <button onClick={resetSalesTab} className="text-red-500 hover:text-red-700 underline">إلغاء التعديل</button>
+                                    </div>
+                                )}
+
                                 <div className="space-y-2 mb-6 max-h-48 overflow-y-auto scrollbar-hide">
                                     {cart.map((c,idx) => (
                                         <div key={idx} className="flex justify-between text-xs font-bold bg-slate-50 p-3 rounded-xl">
@@ -1240,7 +1300,7 @@
                                         disabled={!isWhatsAppSent}
                                         className={`w-full py-4 rounded-2xl font-black shadow-xl transition ${isWhatsAppSent ? 'bg-emerald-600 text-white hover:bg-emerald-700' : 'bg-slate-200 text-slate-400 cursor-not-allowed'}`}
                                      >
-                                        {isWhatsAppSent ? 'حفظ الفاتورة ✅' : 'أرسل الواتساب أولاً للحفظ'}
+                                        {isWhatsAppSent ? (editingOrderId ? 'تحديث الفاتورة ✅' : 'حفظ الفاتورة ✅') : 'أرسل الواتساب أولاً للحفظ'}
                                      </button>
                                 </div>
                             </div>
@@ -1321,8 +1381,13 @@
                                                     <Check size={16}/> تم الاستلام ودفع المبلغ بالكامل
                                                 </button>
                                             )}
+                                            
+                                            <button onClick={() => handleEditOrderInSales(order)} className="col-span-2 bg-indigo-50 text-indigo-600 py-3 rounded-xl font-black text-xs flex items-center justify-center gap-2 hover:bg-indigo-100 transition border border-indigo-100">
+                                                <ShoppingCart size={14}/> إضافة أصناف للطلب (البيع)
+                                            </button>
+
                                             <button onClick={()=>{setEditingOrder(order); setEditAmount(order.paid);}} className="bg-blue-50 text-blue-600 py-3 rounded-xl font-black text-xs flex items-center justify-center gap-2 hover:bg-blue-100 transition border border-blue-100">
-                                                <Edit size={14}/> تعديل الفاتورة
+                                                <Edit size={14}/> تعديل المدفوع
                                             </button>
                                             <button onClick={() => {
                                                 const itemsStr = order.items.map(i=>`• ${i.name} (x${i.qty}) = ${i.qty*i.currentPrice} ج`).join('\n');
