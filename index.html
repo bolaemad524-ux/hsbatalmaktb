@@ -5,8 +5,10 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>نظام استوديو بولا V23.2</title>
     
+    <!-- تحميل تصميم Tailwind -->
     <script src="https://cdn.tailwindcss.com"></script>
     
+    <!-- تحميل مترجم React للمتصفح -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.10/babel.min.js"></script>
     
     <style>
@@ -14,8 +16,15 @@
         .scrollbar-hide::-webkit-scrollbar { display: none; }
         .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
         body { font-family: system-ui, -apple-system, sans-serif; }
+        
+        /* حركة الإشعارات الذكية */
+        @keyframes slideDown {
+            from { top: -50px; opacity: 0; }
+            to { top: 20px; opacity: 1; }
+        }
     </style>
 
+    <!-- خريطة المكاتب لجلب React و Firebase مباشرة من السيرفر -->
     <script type="importmap">
     {
       "imports": {
@@ -34,10 +43,10 @@
     <div id="root">
         <div style="height: 100vh; display: flex; align-items: center; justify-content: center; color: white; font-size: 20px; font-weight: bold; text-align: center; padding: 20px; line-height: 1.8;">
             جاري تهيئة نظام استوديو بولا V23.2 ... برجاء الانتظار<br>
-            <span style="font-size: 14px; color: #94a3b8;">إذا استمرت هذه الشاشة طويلاً، برجاء تحديث الصفحة أو مسح الـ Cache</span>
         </div>
     </div>
 
+    <!-- كود البرنامج (React) -->
     <script type="text/babel" data-type="module">
         import React, { useState, useEffect, useMemo } from 'react';
         import { createRoot } from 'react-dom/client';
@@ -181,6 +190,21 @@
           const [ratings, setRatings] = useState([]); 
 
           useEffect(() => {
+            // تفعيل نظام الإشعارات الذكي (استبدال لـ window.alert)
+            const originalAlert = window.alert;
+            window.alert = (msg) => {
+                const isError = String(msg).includes("خطأ") || String(msg).includes("فارغ") || String(msg).includes("يجب") || String(msg).includes("لا يوجد") || String(msg).includes("عذراً");
+                const bgColor = isError ? '#ef4444' : '#10b981'; // أحمر للخطأ، أخضر للنجاح
+                const div = document.createElement('div');
+                div.innerHTML = `<div style="position:fixed;top:20px;left:50%;transform:translateX(-50%);background:${bgColor};color:white;padding:15px 30px;border-radius:12px;font-weight:bold;z-index:999999;box-shadow:0 10px 25px rgba(0,0,0,0.3);text-align:center;min-width:250px;animation:slideDown 0.3s ease;">${msg}</div>`;
+                document.body.appendChild(div);
+                setTimeout(() => { 
+                    div.style.opacity = '0';
+                    div.style.transition = 'opacity 0.3s ease';
+                    setTimeout(() => { if(document.body.contains(div)) document.body.removeChild(div); }, 300);
+                }, 3000);
+            };
+
             const initAuth = async () => {
                 await signInAnonymously(auth).catch(e => console.error("Auth Error:", e));
             };
@@ -191,6 +215,8 @@
             if (urlParams.get('view') === 'rating') {
                 setCurrentView('rating');
             }
+            
+            return () => { window.alert = originalAlert; };
           }, []);
 
           useEffect(() => {
@@ -458,6 +484,7 @@
             const [customerDetailsModal, setCustomerDetailsModal] = useState(null);
             const [customerPayAmount, setCustomerPayAmount] = useState('');
             const [singleOrderPayConfirm, setSingleOrderPayConfirm] = useState(null); 
+            const [bulkWalletPayConfirm, setBulkWalletPayConfirm] = useState(null); // نافذة تأكيد سحب المحفظة المتعدد
             const [itemToAddToOrder, setItemToAddToOrder] = useState(null); 
             const [qtyInput, setQtyInput] = useState('1'); 
             const [printModalItem, setPrintModalItem] = useState(null);
@@ -553,15 +580,11 @@
             const handleImportInventory = (event) => {
                 const file = event.target.files[0];
                 if (!file) return;
-
                 const reader = new FileReader();
                 reader.onload = async (e) => {
                     try {
                         const importedItems = JSON.parse(e.target.result);
                         if (!Array.isArray(importedItems)) throw new Error("Invalid format");
-                        
-                        if(!window.confirm(`سيتم إضافة ${importedItems.length} صنف إلى المخزن. هل أنت متأكد؟`)) return;
-
                         let count = 0;
                         for (const itemData of importedItems) {
                             const exists = items.some(i => i.name === itemData.name);
@@ -702,12 +725,7 @@
 
                     await batch.commit();
                     resetSalesTab();
-                    
-                    const successDiv = document.createElement('div');
-                    successDiv.innerHTML = '<div style="position:fixed;top:20px;left:50%;transform:translateX(-50%);background:#10b981;color:white;padding:15px 30px;border-radius:12px;font-weight:bold;z-index:9999;box-shadow:0 10px 25px rgba(0,0,0,0.2);animation:slideDown 0.5s ease;">تم تحديث الفاتورة بنجاح ✅</div>';
-                    document.body.appendChild(successDiv);
-                    setTimeout(() => { document.body.removeChild(successDiv); }, 3000);
-
+                    alert("تم تحديث الفاتورة بنجاح ✅");
                 } else {
                     const newOrderRef = doc(collection(db, 'artifacts', appId, 'public', 'data', 'orders'));
                     batch.set(newOrderRef, {
@@ -725,11 +743,7 @@
                     
                     await batch.commit();
                     resetSalesTab();
-                    
-                    const successDiv = document.createElement('div');
-                    successDiv.innerHTML = '<div style="position:fixed;top:20px;left:50%;transform:translateX(-50%);background:#10b981;color:white;padding:15px 30px;border-radius:12px;font-weight:bold;z-index:9999;box-shadow:0 10px 25px rgba(0,0,0,0.2);animation:slideDown 0.5s ease;">تم حفظ الفاتورة بنجاح ✅</div>';
-                    document.body.appendChild(successDiv);
-                    setTimeout(() => { document.body.removeChild(successDiv); }, 3000);
+                    alert("تم حفظ الفاتورة بنجاح ✅");
                 }
             };
             
@@ -750,7 +764,6 @@
 
                 if (isWholesale && selectedWholesaleId) {
                     const activeCustomer = customers.find(c => c.id === selectedWholesaleId);
-                    // لو بنعدل فاتورة، هنستثنيها من المديونية القديمة عشان متبقاش متكررة
                     let unpaidOrders = orders.filter(o => (o.customerId === selectedWholesaleId || o.customerName === customerName) && o.remaining > 0);
                     if(editingOrderId) {
                         unpaidOrders = unpaidOrders.filter(o => o.id !== editingOrderId);
@@ -816,6 +829,7 @@
 
                     await batch.commit();
                     setPayConfirmModal(null);
+                    alert("تم السداد بنجاح ✅");
                 } catch(e) { alert("حدث خطأ"); }
             };
             
@@ -845,10 +859,11 @@
                     
                     setCustomerDetailsModal(prev => ({...prev, walletBalance: (prev.walletBalance || 0) + amount}));
                     setCustomerPayAmount('');
+                    alert("تم الإيداع في المحفظة بنجاح ✅");
                 } catch(e) { console.error(e); alert("حدث خطأ أثناء الإيداع!"); }
             };
 
-            const handlePayCustomerDebtFromWallet = async () => {
+            const handlePayCustomerDebtFromWallet = () => {
                 const activeCustomer = customers.find(c => c.id === customerDetailsModal.id) || customerDetailsModal;
                 const custOrders = orders.filter(o => (o.customerId === activeCustomer.id || o.customerName === activeCustomer.name) && o.remaining > 0).sort((a,b) => (a.createdAt?.seconds||0) - (b.createdAt?.seconds||0));
                 
@@ -860,7 +875,13 @@
 
                 const amountToPay = Math.min(totalDebt, currentWallet);
 
-                if(!window.confirm(`سيتم خصم ${amountToPay} ج من محفظة العميل لسداد المديونيات. تأكيد؟`)) return;
+                // استدعاء نافذة التأكيد الاحترافية بدلاً من المتصفح
+                setBulkWalletPayConfirm({ amount: amountToPay, custOrders, activeCustomer });
+            };
+
+            const executeBulkWalletPay = async () => {
+                if(!bulkWalletPayConfirm) return;
+                const { amount: amountToPay, custOrders, activeCustomer } = bulkWalletPayConfirm;
 
                 try {
                     const batch = writeBatch(db);
@@ -886,8 +907,10 @@
                     });
 
                     await batch.commit();
+                    setBulkWalletPayConfirm(null);
+                    alert("تم سداد الفواتير من المحفظة بنجاح ✅");
                 } catch(e) {
-                    console.error(e); alert("حدث خطأ");
+                    console.error(e); alert("حدث خطأ أثناء السداد");
                 }
             };
             
@@ -936,8 +959,9 @@
 
                     await batch.commit();
                     setSingleOrderPayConfirm(null);
+                    alert("تم السداد بنجاح ✅");
                 } catch(e) { 
-                    console.error(e);
+                    console.error(e); alert("حدث خطأ أثناء السداد!");
                 }
             };
 
@@ -1001,6 +1025,7 @@
                     
                     setDeleteConfirmModal(null);
                     setDeleteReason(''); 
+                    alert("تم الحذف بنجاح ✅");
                 } catch(e) {
                     console.error(e);
                     setDeleteConfirmModal(null);
@@ -1015,6 +1040,7 @@
                     remaining: editingOrder.total - paid
                 });
                 setEditingOrder(null); setEditAmount('');
+                alert("تم التعديل بنجاح ✅");
             };
             
             const handleAddVaultExpense = async () => {
@@ -1026,6 +1052,7 @@
                         createdAt: serverTimestamp()
                     });
                     setShowVaultExpenseModal(false); setVaultExpenseData({amount:'', desc:''});
+                    alert("تم الإضافة بنجاح ✅");
                 }
             };
             
@@ -1068,6 +1095,7 @@
                     const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'app_settings', 'general');
                     await updateDoc(docRef, { [updateField]: passForm.new });
                     setPassModal(null); setPassForm({old: '', new: ''});
+                    alert("تم تغيير الرقم السري بنجاح ✅");
                 } catch (e) { }
             };
             
@@ -1684,7 +1712,26 @@
                         );
                     })()}
 
-                    {/* نافذة التأكيد الاحترافية الجديدة بديلة المتصفح */}
+                    {/* نافذة التأكيد الاحترافية الجديدة لسداد مديونيات متتالية */}
+                    {bulkWalletPayConfirm && (
+                        <div className="fixed inset-0 bg-black/90 flex items-center justify-center p-4 z-[120]">
+                            <div className="bg-slate-800 p-8 rounded-[2.5rem] w-full max-w-sm border border-indigo-500/50 text-center animate-in zoom-in duration-200">
+                                <div className="bg-indigo-500/20 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4 text-indigo-400">
+                                    <CheckCircle size={32}/>
+                                </div>
+                                <h3 className="text-xl font-black mb-2 text-white">تأكيد سداد المديونيات</h3>
+                                <p className="text-slate-400 text-sm font-bold mb-6 leading-relaxed">
+                                    سيتم خصم {bulkWalletPayConfirm.amount} ج من محفظة العميل لسداد الفواتير المعلقة تلقائياً. تأكيد؟
+                                </p>
+                                <div className="flex gap-2">
+                                    <button onClick={executeBulkWalletPay} className="flex-1 bg-indigo-600 hover:bg-indigo-700 py-3 rounded-xl font-black transition text-white">نعم، سداد</button>
+                                    <button onClick={()=>setBulkWalletPayConfirm(null)} className="flex-1 bg-slate-700 hover:bg-slate-600 py-3 rounded-xl font-black transition text-white">إلغاء</button>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* نافذة التأكيد الاحترافية الجديدة لفاتورة واحدة */}
                     {singleOrderPayConfirm && (
                         <div className="fixed inset-0 bg-black/90 flex items-center justify-center p-4 z-[120]">
                             <div className="bg-slate-800 p-8 rounded-[2.5rem] w-full max-w-sm border border-emerald-500/50 text-center animate-in zoom-in duration-200">
@@ -2120,25 +2167,6 @@
                                 <div className="flex gap-2">
                                     <button onClick={handleUpdateCommRate} className="flex-1 bg-indigo-600 text-white py-3 rounded-xl font-black shadow-lg">حفظ</button>
                                     <button onClick={()=>setShowCommModal(false)} className="flex-1 bg-slate-200 text-slate-500 py-3 rounded-xl font-black">إلغاء</button>
-                                </div>
-                            </div>
-                        </div>
-                    )}
-
-                    {payConfirmModal && (
-                        <div className="fixed inset-0 bg-black/90 flex items-center justify-center p-4 z-[110]">
-                            <div className="bg-slate-800 p-8 rounded-[2.5rem] w-full max-w-sm border border-indigo-500/50 text-center animate-in zoom-in duration-200">
-                                <div className="bg-emerald-500/20 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4 text-emerald-400">
-                                    <Check size={32}/>
-                                </div>
-                                <h3 className="text-xl font-black mb-2 text-white">تأكيد السداد</h3>
-                                <p className="text-slate-400 text-sm font-bold mb-6">
-                                    هل أنت متأكد من استلام باقي المبلغ ({payConfirmModal.remaining} ج) وتصفير مديونية العميل؟
-                                </p>
-                                <div className="flex gap-2">
-                                    <button onClick={() => executeQuickPay('cash')} className="flex-1 bg-emerald-600 hover:bg-emerald-700 py-3 rounded-xl font-black transition text-white">نقدي (درج)</button>
-                                    <button onClick={() => executeQuickPay('wallet')} className="flex-1 bg-blue-600 hover:bg-blue-700 py-3 rounded-xl font-black transition text-white">محفظة</button>
-                                    <button onClick={()=>setPayConfirmModal(null)} className="flex-1 bg-slate-700 hover:bg-slate-600 py-3 rounded-xl font-black transition text-white">إلغاء</button>
                                 </div>
                             </div>
                         </div>
