@@ -456,6 +456,8 @@
             const [showExpensesListModal, setShowExpensesListModal] = useState(false);
             const [customerDetailsModal, setCustomerDetailsModal] = useState(null);
             const [customerPayAmount, setCustomerPayAmount] = useState('');
+            const [withdrawAmount, setWithdrawAmount] = useState('');
+            const [showWithdrawModal, setShowWithdrawModal] = useState(false);
             const [singleOrderPayConfirm, setSingleOrderPayConfirm] = useState(null); 
             const [itemToAddToOrder, setItemToAddToOrder] = useState(null); 
             const [qtyInput, setQtyInput] = useState('1'); 
@@ -845,6 +847,38 @@
                     setCustomerDetailsModal(prev => ({...prev, walletBalance: (prev.walletBalance || 0) + amount}));
                     setCustomerPayAmount('');
                 } catch(e) { console.error(e); alert("حدث خطأ أثناء الإيداع!"); }
+            };
+
+            const handleWithdrawCustomerWallet = async (method) => {
+                let amount = parseFloat(withdrawAmount);
+                if(!amount || amount <= 0) return alert("أدخل مبلغ صحيح");
+                const currentWallet = (customers.find(c => c.id === customerDetailsModal.id) || customerDetailsModal).walletBalance || 0;
+                if(amount > currentWallet) return alert("رصيد المحفظة غير كافي!");
+
+                try {
+                    const batch = writeBatch(db);
+                    
+                    const custRef = doc(db, 'artifacts', appId, 'public', 'data', 'wholesale_customers', customerDetailsModal.id);
+                    batch.update(custRef, {
+                        walletBalance: increment(-amount)
+                    });
+
+                    const paymentRef = doc(collection(db, 'artifacts', appId, 'public', 'data', 'debt_payments'));
+                    batch.set(paymentRef, {
+                        customerName: customerDetailsModal.name,
+                        amount: -amount,
+                        dateString: today,
+                        paymentMethod: method,
+                        description: 'سحب من محفظة العميل', 
+                        createdAt: serverTimestamp()
+                    });
+
+                    await batch.commit();
+                    
+                    setCustomerDetailsModal(prev => ({...prev, walletBalance: (prev.walletBalance || 0) - amount}));
+                    setWithdrawAmount('');
+                    setShowWithdrawModal(false);
+                } catch(e) { console.error(e); alert("حدث خطأ أثناء السحب!"); }
             };
 
             const handlePayCustomerDebtFromWallet = async () => {
@@ -1603,6 +1637,14 @@
                                                 <div className="bg-indigo-50 border-2 border-indigo-100 p-4 rounded-[2rem] flex-1 flex flex-col items-center justify-center text-center">
                                                     <div className="text-xs font-black text-indigo-500 mb-1">رصيد المحفظة</div>
                                                     <div className="text-2xl font-black text-indigo-700">{walletBalance} ج</div>
+                                                    {walletBalance > 0 && (
+                                                        <button 
+                                                            onClick={() => { setWithdrawAmount(''); setShowWithdrawModal(true); }}
+                                                            className="mt-3 bg-red-500 hover:bg-red-600 text-white text-[10px] font-black px-3 py-1.5 rounded-lg flex items-center gap-1 transition shadow-sm"
+                                                        >
+                                                            <Banknote size={12}/> سحب العميل
+                                                        </button>
+                                                    )}
                                                 </div>
                                             </div>
 
@@ -1701,6 +1743,34 @@
                                     <button onClick={executeSingleOrderPayInsideModal} className="flex-1 bg-emerald-600 hover:bg-emerald-700 py-3 rounded-xl font-black transition text-white">نعم، تأكيد</button>
                                     <button onClick={()=>setSingleOrderPayConfirm(null)} className="flex-1 bg-slate-700 hover:bg-slate-600 py-3 rounded-xl font-black transition text-white">إلغاء</button>
                                 </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* --- نافذة سحب العميل من المحفظة --- */}
+                    {showWithdrawModal && customerDetailsModal && (
+                        <div className="fixed inset-0 bg-black/90 flex items-center justify-center p-4 z-[130]">
+                            <div className="bg-slate-800 p-8 rounded-[2.5rem] w-full max-w-sm border border-red-500/50 text-center animate-in zoom-in duration-200">
+                                <div className="bg-red-500/20 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4 text-red-400">
+                                    <Banknote size={32}/>
+                                </div>
+                                <h3 className="text-xl font-black mb-2 text-white">سحب العميل</h3>
+                                <p className="text-slate-400 text-sm font-bold mb-4">
+                                    رصيد المحفظة الحالي: {(customers.find(c => c.id === customerDetailsModal.id) || customerDetailsModal).walletBalance || 0} ج
+                                </p>
+                                <input 
+                                    type="number" 
+                                    className="w-full p-4 bg-slate-900 rounded-2xl mb-6 text-center font-black text-white border-2 border-slate-700 focus:border-red-500 outline-none text-xl"
+                                    placeholder="المبلغ المطلوب سحبه"
+                                    value={withdrawAmount}
+                                    onChange={e=>setWithdrawAmount(e.target.value)}
+                                    autoFocus
+                                />
+                                <div className="flex gap-2 mb-3">
+                                    <button onClick={() => handleWithdrawCustomerWallet('cash')} className="flex-1 bg-emerald-600 hover:bg-emerald-700 py-3 rounded-xl font-black transition text-white text-sm">سحب من الدرج اليوم</button>
+                                    <button onClick={() => handleWithdrawCustomerWallet('wallet')} className="flex-1 bg-blue-600 hover:bg-blue-700 py-3 rounded-xl font-black transition text-white text-sm">سحب من محفظة اليوم</button>
+                                </div>
+                                <button onClick={()=>{setShowWithdrawModal(false); setWithdrawAmount('');}} className="w-full bg-slate-700 hover:bg-slate-600 py-3 rounded-xl font-black transition text-white">إلغاء</button>
                             </div>
                         </div>
                     )}
