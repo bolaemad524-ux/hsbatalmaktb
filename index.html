@@ -6,7 +6,6 @@
     <title>نظام استوديو بولا V23.2</title>
     
     <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
     
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
     
@@ -797,91 +796,87 @@
                 setIsWhatsAppSent(true); 
             };
 
-            const generateInvoiceContent = (order) => {
-                const itemsRows = (order.items || []).map(i => `
-                    <tr>
-                        <td style="padding:8px;border-bottom:1px solid #eee;text-align:right;">${i.name}</td>
-                        <td style="padding:8px;border-bottom:1px solid #eee;text-align:center;">${i.qty}</td>
-                        <td style="padding:8px;border-bottom:1px solid #eee;text-align:center;">${i.currentPrice}</td>
-                        <td style="padding:8px;border-bottom:1px solid #eee;text-align:center;font-weight:bold;">${(i.qty * i.currentPrice).toFixed(0)}</td>
-                    </tr>
-                `).join('');
-                return `
-                    <div style="font-family:Tahoma,Arial,sans-serif;padding:20px;background:#fff;color:#111;width:380px;direction:rtl;text-align:right;">
-                        <div style="text-align:center;margin-bottom:20px;border-bottom:2px solid #10b981;padding-bottom:15px;">
-                            <h1 style="margin:0;font-size:22px;color:#10b981;">استوديو بولا عماد</h1>
-                            <p style="margin:4px 0;font-size:12px;color:#666;">فاتورة رقم: ${(order.id || '').slice(-6) || '---'}</p>
-                            <p style="margin:4px 0;font-size:12px;color:#666;">التاريخ: ${order.dateString || ''}</p>
-                        </div>
-                        <div style="margin-bottom:15px;font-size:14px;">
-                            <div><strong>العميل:</strong> ${order.customerName || ''}</div>
-                            <div><strong>الهاتف:</strong> ${order.customerPhone || '---'}</div>
-                            ${order.employeeName ? `<div><strong>الموظف:</strong> ${order.employeeName}</div>` : ''}
-                        </div>
-                        <table style="width:100%;border-collapse:collapse;margin:15px 0;font-size:13px;">
-                            <thead><tr style="background:#f1f5f9;"><th style="padding:8px;text-align:center;">الصنف</th><th style="padding:8px;text-align:center;">الكمية</th><th style="padding:8px;text-align:center;">السعر</th><th style="padding:8px;text-align:center;">الإجمالي</th></tr></thead>
-                            <tbody>${itemsRows}</tbody>
-                        </table>
-                        <div style="margin-top:15px;font-size:14px;">
-                            <div style="display:flex;justify-content:space-between;padding:4px 0;"><span>الإجمالي</span><span>${order.total} ج</span></div>
-                            <div style="display:flex;justify-content:space-between;padding:4px 0;"><span>المدفوع</span><span>${order.paid} ج</span></div>
-                            <div style="display:flex;justify-content:space-between;padding:8px 0;font-size:18px;font-weight:bold;color:#10b981;border-top:2px solid #10b981;margin-top:8px;"><span>الباقي</span><span>${order.remaining} ج</span></div>
-                        </div>
-                        <div style="margin-top:25px;text-align:center;font-size:11px;color:#888;border-top:1px dashed #ccc;padding-top:10px;">شكراً لتعاملكم معنا ✨<br>استوديو بولا عماد</div>
-                    </div>
-                `;
-            };
-
             const printOrder = (order) => {
                 try {
-                    const content = generateInvoiceContent(order);
-                    const w = window.open('', '_blank', 'width=450,height=700');
+                    const itemsRows = (order.items || []).map(i => `
+                        <tr>
+                            <td style="padding:10px;border-bottom:1px solid #ddd;text-align:right;">${i.name}</td>
+                            <td style="padding:10px;border-bottom:1px solid #ddd;text-align:center;">${i.qty}</td>
+                            <td style="padding:10px;border-bottom:1px solid #ddd;text-align:center;">${i.currentPrice}</td>
+                            <td style="padding:10px;border-bottom:1px solid #ddd;text-align:center;font-weight:bold;">${(i.qty * i.currentPrice).toFixed(0)}</td>
+                        </tr>
+                    `).join('');
+
+                    const html = `<!DOCTYPE html>
+<html dir="rtl" lang="ar">
+<head>
+<meta charset="UTF-8">
+<title>فاتورة - ${order.customerName || ''}</title>
+<style>
+  @page { size: A4; margin: 15mm; }
+  body { font-family: Tahoma, Arial, sans-serif; margin: 0; padding: 0; color: #111; }
+  .invoice { width: 100%; max-width: 180mm; margin: 0 auto; }
+  .header { text-align: center; margin-bottom: 25px; border-bottom: 3px solid #10b981; padding-bottom: 15px; }
+  .header h1 { margin: 0; font-size: 28px; color: #10b981; }
+  .header p { margin: 6px 0; font-size: 14px; color: #555; }
+  .info { margin-bottom: 20px; font-size: 15px; line-height: 1.8; }
+  table { width: 100%; border-collapse: collapse; margin: 20px 0; font-size: 14px; }
+  th { background: #f1f5f9; padding: 12px 8px; text-align: center; border-bottom: 2px solid #ccc; }
+  td { padding: 10px 8px; }
+  .totals { margin-top: 20px; font-size: 16px; }
+  .totals .row { display: flex; justify-content: space-between; padding: 6px 0; }
+  .total-final { font-size: 20px; font-weight: bold; color: #10b981; border-top: 2px solid #10b981; padding-top: 10px; margin-top: 10px; }
+  .footer { margin-top: 40px; text-align: center; font-size: 13px; color: #777; border-top: 1px dashed #ccc; padding-top: 15px; }
+  @media print {
+    body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  }
+</style>
+</head>
+<body>
+  <div class="invoice">
+    <div class="header">
+      <h1>استوديو بولا عماد</h1>
+      <p>فاتورة رقم: ${(order.id || '').slice(-6) || '---'}</p>
+      <p>التاريخ: ${order.dateString || ''}</p>
+    </div>
+    <div class="info">
+      <div><strong>العميل:</strong> ${order.customerName || ''}</div>
+      <div><strong>الهاتف:</strong> ${order.customerPhone || '---'}</div>
+    </div>
+    <table>
+      <thead>
+        <tr>
+          <th>الصنف</th>
+          <th>الكمية</th>
+          <th>السعر</th>
+          <th>الإجمالي</th>
+        </tr>
+      </thead>
+      <tbody>${itemsRows}</tbody>
+    </table>
+    <div class="totals">
+      <div class="row"><span>الإجمالي</span><span>${order.total} ج</span></div>
+      <div class="row"><span>المدفوع</span><span>${order.paid} ج</span></div>
+      <div class="row total-final"><span>الباقي</span><span>${order.remaining} ج</span></div>
+    </div>
+    <div class="footer">شكراً لتعاملكم معنا ✨<br>استوديو بولا عماد</div>
+  </div>
+</body>
+</html>`;
+
+                    const w = window.open('', '_blank');
                     if (!w) {
-                        alert('المتصفح منع النافذة المنبثقة. اسمح بالنوافذ لهذا الموقع.');
+                        alert('المتصفح منع النافذة. اسمح بالنوافذ المنبثقة.');
                         return;
                     }
-                    w.document.write('<!DOCTYPE html><html dir="rtl"><head><meta charset="UTF-8"><title>فاتورة</title></head><body style="margin:0;padding:10px;">' + content + '</body></html>');
+                    w.document.write(html);
                     w.document.close();
                     setTimeout(() => {
                         w.focus();
                         w.print();
-                    }, 500);
+                    }, 400);
                 } catch (e) {
                     alert('حدث خطأ في الطباعة');
-                    console.error(e);
-                }
-            };
-
-            const downloadOrderImage = async (order) => {
-                try {
-                    const content = generateInvoiceContent(order);
-                    const container = document.createElement('div');
-                    container.style.cssText = 'position:fixed;left:-9999px;top:0;background:#fff;z-index:-1;';
-                    container.innerHTML = content;
-                    document.body.appendChild(container);
-                    
-                    const target = container.firstElementChild;
-                    if (!target) throw new Error('no target');
-                    
-                    await new Promise(r => setTimeout(r, 150));
-                    
-                    const canvas = await html2canvas(target, { 
-                        scale: 2, 
-                        useCORS: true, 
-                        backgroundColor: '#ffffff',
-                        logging: false
-                    });
-                    
-                    document.body.removeChild(container);
-                    
-                    const link = document.createElement('a');
-                    link.download = 'فاتورة_' + (order.customerName || 'عميل').replace(/\\s+/g,'_') + '_' + (order.dateString || '') + '.png';
-                    link.href = canvas.toDataURL('image/png');
-                    document.body.appendChild(link);
-                    link.click();
-                    document.body.removeChild(link);
-                } catch (e) {
-                    alert('حدث خطأ أثناء تحميل الصورة. جرب الطباعة بدلاً منها.');
                     console.error(e);
                 }
             };
@@ -1522,9 +1517,6 @@
                                             </button>
                                             <button onClick={() => printOrder(order)} className="bg-slate-100 text-slate-700 py-3 rounded-xl font-black text-xs flex items-center justify-center gap-2 hover:bg-slate-200 transition border border-slate-200">
                                                 <Printer size={14}/> طباعة
-                                            </button>
-                                            <button onClick={() => downloadOrderImage(order)} className="bg-purple-50 text-purple-600 py-3 rounded-xl font-black text-xs flex items-center justify-center gap-2 hover:bg-purple-100 transition border border-purple-100">
-                                                <Download size={14}/> صورة
                                             </button>
                                         </div>
                                     </div>
