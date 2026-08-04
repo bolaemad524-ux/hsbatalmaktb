@@ -1103,6 +1103,7 @@
                     await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'deleted_logs'), {
                         orderId: orderId,
                         customerName: deleteConfirmModal.customerName,
+                        customerPhone: deleteConfirmModal.customerPhone || '',
                         total: deleteConfirmModal.total,
                         reason: deleteReason,
                         deletedAt: serverTimestamp(),
@@ -2015,6 +2016,18 @@
                                                     <div className="bg-red-100 px-3 py-1 rounded-lg text-xs font-black text-red-700 flex items-center gap-1">
                                                         <ClipboardList size={12}/> {log.reason}
                                                     </div>
+                                                    {log.customerPhone && (
+                                                        <button 
+                                                            onClick={() => {
+                                                                const msg = "مكتب بولا عماد معاك يا فندم .. فى تجربه التقييم ممكن اعرف سبب الغاء الاوردر الخاص بك ؟";
+                                                                window.open(`https://wa.me/2${log.customerPhone}?text=${encodeURIComponent(msg)}`, '_blank');
+                                                            }}
+                                                            className="bg-emerald-500 hover:bg-emerald-600 text-white p-2 rounded-xl transition shadow-sm"
+                                                            title="واتساب"
+                                                        >
+                                                            <Send size={16}/>
+                                                        </button>
+                                                    )}
                                                 </div>
                                             ))}
                                         </div>
