@@ -188,6 +188,11 @@
             const unpaid = orders.filter(o => o.remaining > 0);
             const totalDebt = unpaid.reduce((s,o) => s + (o.remaining||0), 0);
             const displayName = cname || (orders[0]?.customerName) || 'عميل';
+            const currentYear = new Date().getFullYear().toString();
+            const yearOrders = orders.filter(o => (o.dateString || '').startsWith(currentYear));
+            const yearTotal = yearOrders.reduce((s,o) => s + (o.total || 0), 0);
+            const yearPaid = yearOrders.reduce((s,o) => s + (o.paid || 0), 0);
+            const yearCount = yearOrders.length;
 
             const buildWhatsAppMsg = () => {
                 let msg = `*كشف حساب - استوديو بولا عماد*\n`;
@@ -208,7 +213,21 @@
                     msg += `================\n`;
                     msg += `*إجمالي المديونية: ${totalDebt} ج*\n`;
                 }
-                msg += `\nمن فضلك راجع الكشف وأخبرنا بالاستلام.`;
+
+                const allItems = [];
+                unpaid.forEach(o => {
+                    (o.items||[]).forEach(item => {
+                        allItems.push(`• ${item.name} × ${item.qty}`);
+                    });
+                });
+                if (allItems.length > 0) {
+                    msg += `\n\n================\n`;
+                    msg += `*📦 الأوردرات اللي هيستلمها الدليفري:*\n\n`;
+                    msg += allItems.join('\n');
+                    msg += `\n================`;
+                }
+
+                msg += `\n\nمن فضلك راجع الكشف وأخبرنا بالاستلام.`;
                 return msg;
             };
 
@@ -244,31 +263,51 @@
                         <div className="bg-slate-800 rounded-[2rem] p-6 mb-6 border border-slate-700">
                             <div className="font-black text-xl mb-1">{displayName}</div>
                             <div className="text-sm text-slate-400 font-bold mb-4">{cphone}</div>
-                            <div className={`text-center py-4 rounded-2xl font-black text-2xl ${totalDebt > 0 ? 'bg-red-500/20 text-red-400' : 'bg-emerald-500/20 text-emerald-400'}`}>
-                                {totalDebt > 0 ? `المديونية: ${totalDebt} ج` : 'الحساب خالص ✅'}
+                            <div className={`text-center py-4 rounded-2xl font-black text-2xl mb-4 ${totalDebt > 0 ? 'bg-red-500/20 text-red-400' : 'bg-emerald-500/20 text-emerald-400'}`}>
+                                {totalDebt > 0 ? `المديونية الحالية: ${totalDebt} ج` : 'الحساب خالص ✅'}
+                            </div>
+                            <div className="grid grid-cols-3 gap-2 text-center">
+                                <div className="bg-slate-900/50 rounded-xl p-3">
+                                    <div className="text-[10px] text-slate-400 font-bold">عمليات {currentYear}</div>
+                                    <div className="font-black text-lg text-white">{yearCount}</div>
+                                </div>
+                                <div className="bg-slate-900/50 rounded-xl p-3">
+                                    <div className="text-[10px] text-slate-400 font-bold">إجمالي المشتريات</div>
+                                    <div className="font-black text-lg text-emerald-400">{yearTotal} ج</div>
+                                </div>
+                                <div className="bg-slate-900/50 rounded-xl p-3">
+                                    <div className="text-[10px] text-slate-400 font-bold">إجمالي المدفوع</div>
+                                    <div className="font-black text-lg text-blue-400">{yearPaid} ج</div>
+                                </div>
                             </div>
                         </div>
 
-                        <div className="space-y-4 mb-8">
-                            {unpaid.length === 0 ? (
-                                <div className="bg-emerald-500/10 border border-emerald-500/30 rounded-2xl p-8 text-center">
-                                    <div className="text-emerald-400 font-black text-lg">لا توجد فواتير معلقة</div>
+                        <h3 className="font-black text-lg mb-3 text-slate-300">سجل المشتريات خلال السنة</h3>
+                        <div className="space-y-3 mb-8 max-h-[50vh] overflow-y-auto">
+                            {yearOrders.length === 0 ? (
+                                <div className="bg-slate-800 border border-slate-700 rounded-2xl p-8 text-center text-slate-400 font-bold">
+                                    لا توجد عمليات هذه السنة
                                 </div>
-                            ) : unpaid.map(o => (
-                                <div key={o.id} className="bg-slate-800 rounded-2xl p-5 border border-slate-700">
-                                    <div className="flex justify-between items-center mb-3">
+                            ) : yearOrders.map(o => (
+                                <div key={o.id} className={`rounded-2xl p-4 border ${o.remaining > 0 ? 'bg-red-500/10 border-red-500/30' : 'bg-slate-800 border-slate-700'}`}>
+                                    <div className="flex justify-between items-center mb-2">
                                         <div className="text-xs text-slate-400 font-bold">{o.dateString}</div>
-                                        <div className="text-red-400 font-black">باقي: {o.remaining} ج</div>
+                                        <div className={`text-sm font-black ${o.remaining > 0 ? 'text-red-400' : 'text-emerald-400'}`}>
+                                            {o.remaining > 0 ? `باقي: ${o.remaining} ج` : 'خالص ✅'}
+                                        </div>
                                     </div>
-                                    <div className="space-y-1 text-sm">
+                                    <div className="space-y-1 text-sm text-slate-300">
                                         {(o.items||[]).map((item, i) => (
-                                            <div key={i} className="flex justify-between text-slate-300">
+                                            <div key={i} className="flex justify-between">
                                                 <span>• {item.name} ×{item.qty}</span>
                                                 <span>{(item.qty * item.currentPrice).toFixed(0)} ج</span>
                                             </div>
                                         ))}
                                     </div>
-                                    <div className="mt-3 pt-3 border-t border-slate-700 flex justify-between text-xs font-bold text-slate-400">
+                                    {(o.deliveryFee > 0) && (
+                                        <div className="text-xs text-orange-400 font-bold mt-1">دليفري: {o.deliveryFee} ج</div>
+                                    )}
+                                    <div className="mt-2 pt-2 border-t border-slate-700 flex justify-between text-xs font-bold text-slate-400">
                                         <span>إجمالي: {o.total} ج</span>
                                         <span>مدفوع: {o.paid} ج</span>
                                     </div>
@@ -276,13 +315,15 @@
                             ))}
                         </div>
 
-                        <button 
-                            onClick={sendToStudio}
-                            className="w-full bg-emerald-500 hover:bg-emerald-600 text-white py-4 rounded-2xl font-black text-lg flex items-center justify-center gap-2 shadow-xl transition"
-                        >
-                            <Send size={22}/> إرسال الكشف على واتساب الاستوديو
-                        </button>
-                        <p className="text-center text-slate-500 text-xs font-bold mt-4">سيتم إرسال التفاصيل إلى رقم الاستوديو</p>
+                        {totalDebt > 0 && (
+                            <button 
+                                onClick={sendToStudio}
+                                className="w-full bg-emerald-500 hover:bg-emerald-600 text-white py-4 rounded-2xl font-black text-lg flex items-center justify-center gap-2 shadow-xl transition mb-3"
+                            >
+                                <Send size={22}/> إرسال الكشف على واتساب الاستوديو
+                            </button>
+                        )}
+                        <p className="text-center text-slate-500 text-xs font-bold">استوديو بولا عماد — كشف حسابك الخاص</p>
                     </div>
                 </div>
             );
@@ -559,6 +600,7 @@
             const [cart, setCart] = useState([]);
             const [amountPaid, setAmountPaid] = useState('');
             const [discount, setDiscount] = useState(''); 
+            const [deliveryFee, setDeliveryFee] = useState('');
             const [customerName, setCustomerName] = useState('');
             const [customerPhone, setCustomerPhone] = useState('');
             const [selectedEmployee, setSelectedEmployee] = useState(''); 
@@ -787,7 +829,7 @@
             };
 
             const resetSalesTab = () => {
-                setCart([]); setAmountPaid(''); setDiscount(''); setCustomerName(''); 
+                setCart([]); setAmountPaid(''); setDiscount(''); setDeliveryFee(''); setCustomerName(''); 
                 setCustomerPhone(''); setSelectedWholesaleId(''); setSelectedEmployee(''); 
                 setIsWhatsAppSent(false); setEditingOrderId(null); setOriginalOrderItems([]);
             };
@@ -798,6 +840,7 @@
                 setCustomerPhone(order.customerPhone || '');
                 setAmountPaid(order.paid);
                 setDiscount(order.discount || '');
+                setDeliveryFee(order.deliveryFee || '');
                 setSelectedEmployee(order.employeeName || '');
                 if (order.customerId) {
                     setIsWholesale(true);
@@ -816,7 +859,8 @@
                 if(!cart.length) return alert("السلة فارغة");
                 const subTotalTemp = cart.reduce((a,b)=>a+(b.currentPrice*b.qty),0);
                 const discountValTemp = parseFloat(discount) || 0;
-                const totalTemp = Math.max(0, subTotalTemp - discountValTemp);
+                const deliveryValTemp = parseFloat(deliveryFee) || 0;
+                const totalTemp = Math.max(0, subTotalTemp - discountValTemp + deliveryValTemp);
                 const isSmallOrder = totalTemp < 5;
 
                 if(!selectedEmployee) return alert("يرجى اختيار الموظف!");
@@ -826,7 +870,8 @@
 
                 const subTotal = cart.reduce((a,b)=>a+(b.currentPrice*b.qty),0);
                 const discountVal = parseFloat(discount) || 0;
-                const total = Math.max(0, subTotal - discountVal); 
+                const deliveryVal = parseFloat(deliveryFee) || 0;
+                const total = Math.max(0, subTotal - discountVal + deliveryVal); 
                 const paid = parseFloat(amountPaid)||0;
 
                 const batch = writeBatch(db);
@@ -834,7 +879,7 @@
                 if (editingOrderId) {
                     const orderRef = doc(db, 'artifacts', appId, 'public', 'data', 'orders', editingOrderId);
                     batch.update(orderRef, {
-                        items: cart, subTotal, discount: discountVal, total, paid, remaining: total-paid,
+                        items: cart, subTotal, discount: discountVal, deliveryFee: deliveryVal, total, paid, remaining: total-paid,
                         customerName, customerPhone, employeeName: selectedEmployee, paymentMethod, customerId: selectedWholesaleId || null
                     });
 
@@ -864,7 +909,7 @@
                 } else {
                     const newOrderRef = doc(collection(db, 'artifacts', appId, 'public', 'data', 'orders'));
                     batch.set(newOrderRef, {
-                        items: cart, subTotal, discount: discountVal, total, paid, remaining: total-paid, initialPaid: paid, 
+                        items: cart, subTotal, discount: discountVal, deliveryFee: deliveryVal, total, paid, remaining: total-paid, initialPaid: paid, 
                         customerName, customerPhone, employeeName: selectedEmployee, paymentMethod, customerId: selectedWholesaleId || null,
                         dateString: today, monthString: today.slice(0, 7), createdAt: serverTimestamp()
                     });
@@ -893,7 +938,8 @@
 
                 const subTotal = cart.reduce((a,b)=>a+(b.currentPrice*b.qty),0);
                 const discountVal = parseFloat(discount) || 0;
-                const total = Math.max(0, subTotal - discountVal); 
+                const deliveryVal = parseFloat(deliveryFee) || 0;
+                const total = Math.max(0, subTotal - discountVal + deliveryVal); 
                 const paid = parseFloat(amountPaid)||0;
                 const currentRemaining = total - paid;
 
@@ -914,6 +960,7 @@
                     
                     msg = `*كشف حساب وفاتورة استوديو بولا عماد*\nالعميل: ${customerName}\n================\n\n`;
                     msg += `*📦 تفاصيل أوردر اليوم:*\n${currentItemsStr}\n`;
+                    if (deliveryVal > 0) msg += `دليفري: ${deliveryVal} ج\n`;
                     msg += `الإجمالي: ${total} ج | المدفوع: ${paid} ج | *الباقي: ${currentRemaining} ج*\n\n`;
                     
                     if (unpaidOrders.length > 0) {
@@ -941,7 +988,9 @@
                     msg += getCustomerFooter(customerName, customerPhone);
 
                 } else {
-                    msg = `*فاتورة استوديو بولا عماد*\nالعميل: ${customerName}\n--------------\n${currentItemsStr}\n--------------\nالإجمالي: ${total} ج\nالمدفوع: ${paid} ج\n*الباقي: ${currentRemaining} ج*\n${getCustomerFooter(customerName, customerPhone)}`;
+                    msg = `*فاتورة استوديو بولا عماد*\nالعميل: ${customerName}\n--------------\n${currentItemsStr}\n--------------\n`;
+                    if (deliveryVal > 0) msg += `دليفري: ${deliveryVal} ج\n`;
+                    msg += `الإجمالي: ${total} ج\nالمدفوع: ${paid} ج\n*الباقي: ${currentRemaining} ج*\n${getCustomerFooter(customerName, customerPhone)}`;
                 }
                 
                 window.open(`https://wa.me/2${customerPhone}?text=${encodeURIComponent(msg)}`, '_blank');
@@ -1007,6 +1056,7 @@
       <tbody>${itemsRows}</tbody>
     </table>
     <div class="totals">
+      ${(order.deliveryFee > 0) ? `<div class="row"><span>دليفري</span><span>${order.deliveryFee} ج</span></div>` : ''}
       <div class="row"><span>الإجمالي</span><span>${order.total} ج</span></div>
       <div class="row"><span>المدفوع</span><span>${order.paid} ج</span></div>
       <div class="row total-final"><span>الباقي</span><span>${order.remaining} ج</span></div>
@@ -1535,12 +1585,17 @@
                                     ))}
                                 </div>
                                 <div className="text-3xl font-black text-center mb-6 text-emerald-800 bg-emerald-50 py-4 rounded-2xl">
-                                     {(cart.reduce((a,b)=>a+(b.currentPrice*b.qty),0) - (parseFloat(discount)||0)).toFixed(0)} ج
+                                     {(cart.reduce((a,b)=>a+(b.currentPrice*b.qty),0) - (parseFloat(discount)||0) + (parseFloat(deliveryFee)||0)).toFixed(0)} ج
                                 </div>
                                 <div className="space-y-2">
                                      <div className="flex items-center gap-2 bg-slate-100 rounded-xl p-1 mb-2">
                                         <Percent size={16} className="text-slate-400 ml-2"/>
                                         <input className="w-full p-2 bg-transparent text-center font-black outline-none" placeholder="خصم (اختياري)" type="number" value={discount} onChange={e=>setDiscount(e.target.value)}/>
+                                     </div>
+
+                                     <div className="flex items-center gap-2 bg-orange-50 rounded-xl p-1 mb-2 border border-orange-100">
+                                        <span className="text-orange-500 text-xs font-black mr-2 whitespace-nowrap">دليفري</span>
+                                        <input className="w-full p-2 bg-transparent text-center font-black outline-none text-orange-700" placeholder="حساب دليفري (اختياري)" type="number" value={deliveryFee} onChange={e=>setDeliveryFee(e.target.value)}/>
                                      </div>
 
                                      <input className="w-full p-3 bg-slate-100 rounded-xl text-center font-black border-2 border-transparent focus:border-emerald-500 outline-none" placeholder="المدفوع" type="number" value={amountPaid} onChange={e=>setAmountPaid(e.target.value)}/>
@@ -1570,7 +1625,7 @@
                                         <button onClick={()=>setPaymentMethod('wallet')} className={`flex-1 py-2 rounded-lg text-xs font-black ${paymentMethod==='wallet'?'bg-blue-600 text-white shadow-md':'bg-slate-100'}`}>محفظة</button>
                                      </div>
                                      {(() => {
-                                        const currentTotal = Math.max(0, cart.reduce((a,b)=>a+(b.currentPrice*b.qty),0) - (parseFloat(discount)||0));
+                                        const currentTotal = Math.max(0, cart.reduce((a,b)=>a+(b.currentPrice*b.qty),0) - (parseFloat(discount)||0) + (parseFloat(deliveryFee)||0));
                                         const isSmall = currentTotal < 5;
                                         const canSave = isWhatsAppSent || (isSmall && !customerPhone.trim());
                                         return (
@@ -1877,20 +1932,34 @@
                                             <button onClick={() => setCustomerDetailsModal(c)} className="w-full bg-slate-900 text-white py-3 rounded-xl font-black text-sm flex items-center justify-center gap-2 hover:bg-black transition shadow-lg mt-auto">
                                                 <FileText size={16}/> عرض تفاصيل وكشف حساب العميل
                                             </button>
-                                            <button 
-                                                onClick={() => {
-                                                    const base = window.location.href.split('?')[0];
-                                                    const link = `${base}?view=statement&phone=${encodeURIComponent(c.phone || '')}&cname=${encodeURIComponent(c.name || '')}`;
-                                                    navigator.clipboard.writeText(link).then(() => {
-                                                        alert('تم نسخ رابط كشف الحساب ✅\nابعت الرابط للعميل');
-                                                    }).catch(() => {
-                                                        prompt('انسخ الرابط:', link);
-                                                    });
-                                                }}
-                                                className="w-full bg-emerald-50 text-emerald-700 py-3 rounded-xl font-black text-sm flex items-center justify-center gap-2 hover:bg-emerald-100 transition border border-emerald-100 mt-2"
-                                            >
-                                                <Send size={16}/> نسخ رابط كشف الحساب للعميل
-                                            </button>
+                                            <div className="grid grid-cols-2 gap-2 mt-2">
+                                                <button 
+                                                    onClick={() => {
+                                                        const base = window.location.href.split('?')[0];
+                                                        const link = `${base}?view=statement&phone=${encodeURIComponent(c.phone || '')}&cname=${encodeURIComponent(c.name || '')}`;
+                                                        navigator.clipboard.writeText(link).then(() => {
+                                                            alert('تم نسخ الرابط ✅');
+                                                        }).catch(() => {
+                                                            prompt('انسخ الرابط:', link);
+                                                        });
+                                                    }}
+                                                    className="bg-slate-100 text-slate-600 py-3 rounded-xl font-black text-xs flex items-center justify-center gap-1 hover:bg-slate-200 transition"
+                                                >
+                                                    نسخ الرابط
+                                                </button>
+                                                <button 
+                                                    onClick={() => {
+                                                        if (!c.phone) return alert('مفيش رقم للعميل');
+                                                        const base = window.location.href.split('?')[0];
+                                                        const link = `${base}?view=statement&phone=${encodeURIComponent(c.phone || '')}&cname=${encodeURIComponent(c.name || '')}`;
+                                                        const msg = `أهلاً بك أ. ${c.name} ✨\n\nده *رابط كشف حسابك الخاص* في استوديو بولا عماد:\n${link}\n\n📌 *من خلال الرابط هتقدر:*\n• تشوف كل مشترياتك خلال السنة\n• تعرف المديونية الحالية إن وجدت\n• تشوف تفاصيل كل فاتورة\n• تبعت تأكيد الاستلام للاستوديو مباشرة من جوه الرابط\n\nاضغط على الرابط وافتحه من متصفح الموبايل.`;
+                                                        window.open(`https://wa.me/2${c.phone}?text=${encodeURIComponent(msg)}`, '_blank');
+                                                    }}
+                                                    className="bg-emerald-500 text-white py-3 rounded-xl font-black text-xs flex items-center justify-center gap-1 hover:bg-emerald-600 transition"
+                                                >
+                                                    <Send size={14}/> إرسال للعميل
+                                                </button>
+                                            </div>
                                             <button onClick={()=>deleteDoc(doc(db,'artifacts',appId,'public','data','wholesale_customers',c.id))} className="absolute top-4 left-4 text-slate-200 hover:text-red-500 transition"><Trash2 size={16}/></button>
                                         </div>
                                     );
