@@ -2133,11 +2133,25 @@
                                                                         ) : (
                                                                             <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
                                                                                 {Array.from(new Set([...mOrders.map(o=>o.dateString), ...mExpenses.map(e=>e.dateString), ...mDebtPays.map(d=>d.dateString)])).sort().map(date => {
-                                                                                    const dO = mOrders.filter(o=>o.dateString===date).reduce((s,o)=>s+(o.initialPaid !== undefined ? o.initialPaid : o.paid),0);
-                                                                                    const dDP = mDebtPays.filter(dp=>dp.dateString===date).reduce((s,d)=>s+d.amount,0);
-                                                                                    const dE = mExpenses.filter(e=>e.dateString===date).reduce((s,e)=>s+e.amount,0);
-                                                                                    
-                                                                                    const dayInc = dO + dDP;
+                                                                                    const dayOrders = mOrders.filter(o=>o.dateString===date);
+                                                                                    const dayDebtPays = mDebtPays.filter(dp=>dp.dateString===date);
+                                                                                    const dE = mExpenses.filter(e=>e.dateString===date).reduce((s,e)=>s+(e.amount||0),0);
+
+                                                                                    let cashIn = 0;
+                                                                                    let walletIn = 0;
+                                                                                    dayOrders.forEach(o => {
+                                                                                        const initialPayment = o.initialPaid !== undefined ? o.initialPaid : o.paid;
+                                                                                        if (o.paymentMethod === 'wallet') walletIn += initialPayment;
+                                                                                        else cashIn += initialPayment;
+                                                                                    });
+                                                                                    dayDebtPays.forEach(dp => {
+                                                                                        if (dp.paymentMethod === 'wallet') walletIn += (dp.amount||0);
+                                                                                        else cashIn += (dp.amount||0);
+                                                                                    });
+
+                                                                                    const drawer = cashIn - dE;
+                                                                                    const wallet = walletIn;
+                                                                                    const dayNet = drawer + wallet;
 
                                                                                     return (
                                                                                         <div 
@@ -2145,9 +2159,9 @@
                                                                                             className={`p-3 rounded-2xl text-center border cursor-pointer transition relative bg-slate-50 border-slate-100 hover:border-emerald-200`}
                                                                                         >
                                                                                             <div className={`text-[10px] font-black mb-1 text-slate-400`}>{date.split('-')[2]} / {date.split('-')[1]}</div>
-                                                                                            <div className={`text-sm font-black mb-1 text-emerald-600`}>+{dayInc}</div>
-                                                                                            <div className={`text-sm font-black text-red-500`}>-{dE}</div>
-                                                                                            <div className={`border-t mt-2 pt-1 text-xs font-black border-slate-200 text-slate-800`}>{dayInc - dE} ج</div>
+                                                                                            <div className="text-[11px] font-black text-emerald-600">درج: {drawer} ج</div>
+                                                                                            <div className="text-[11px] font-black text-blue-600">محفظة: {wallet} ج</div>
+                                                                                            <div className={`border-t mt-2 pt-1 text-xs font-black border-slate-200 ${dayNet>=0?'text-slate-800':'text-red-600'}`}>{dayNet} ج</div>
                                                                                         </div>
                                                                                     );
                                                                                 })}
