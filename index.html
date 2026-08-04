@@ -2006,9 +2006,11 @@
                                         <h3 className="text-lg font-black text-red-800 mb-4 flex items-center gap-2"><Trash2 size={20}/> سجل عمليات الحذف (للمراجعة)</h3>
                                         <div className="space-y-2 max-h-60 overflow-y-auto scrollbar-hide">
                                             {deletedLogs.length === 0 ? <p className="text-center text-red-300 font-black text-sm">سجل الحذف نظيف</p> : 
-                                             deletedLogs.map(log => (
+                                             deletedLogs.map(log => {
+                                                const phone = log.customerPhone || (customers.find(c => c.name === log.customerName)?.phone) || '';
+                                                return (
                                                 <div key={log.id} className="bg-white p-4 rounded-2xl border border-red-100 shadow-sm flex flex-col md:flex-row justify-between items-start md:items-center gap-2">
-                                                    <div>
+                                                    <div className="flex-1">
                                                         <div className="text-sm font-black text-slate-800">فاتورة: {log.customerName}</div>
                                                         <div className="text-[10px] text-slate-400 font-bold">{log.dateString}</div>
                                                     </div>
@@ -2016,20 +2018,20 @@
                                                     <div className="bg-red-100 px-3 py-1 rounded-lg text-xs font-black text-red-700 flex items-center gap-1">
                                                         <ClipboardList size={12}/> {log.reason}
                                                     </div>
-                                                    {log.customerPhone && (
-                                                        <button 
-                                                            onClick={() => {
-                                                                const msg = "مكتب بولا عماد معاك يا فندم .. فى تجربه التقييم ممكن اعرف سبب الغاء الاوردر الخاص بك ؟";
-                                                                window.open(`https://wa.me/2${log.customerPhone}?text=${encodeURIComponent(msg)}`, '_blank');
-                                                            }}
-                                                            className="bg-emerald-500 hover:bg-emerald-600 text-white p-2 rounded-xl transition shadow-sm"
-                                                            title="واتساب"
-                                                        >
-                                                            <Send size={16}/>
-                                                        </button>
-                                                    )}
+                                                    <button 
+                                                        onClick={() => {
+                                                            if(!phone) return alert("مفيش رقم واتساب مسجل لهذا العميل");
+                                                            const msg = "مكتب بولا عماد معاك يا فندم .. فى تجربه التقييم ممكن اعرف سبب الغاء الاوردر الخاص بك ؟";
+                                                            window.open(`https://wa.me/2${phone}?text=${encodeURIComponent(msg)}`, '_blank');
+                                                        }}
+                                                        className={`p-2.5 rounded-xl transition shadow-sm flex items-center justify-center ${phone ? 'bg-emerald-500 hover:bg-emerald-600 text-white' : 'bg-slate-200 text-slate-400'}`}
+                                                        title={phone ? "واتساب" : "لا يوجد رقم"}
+                                                    >
+                                                        <Send size={16}/>
+                                                    </button>
                                                 </div>
-                                            ))}
+                                                );
+                                            })}
                                         </div>
                                     </div>
 
