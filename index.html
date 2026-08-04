@@ -442,6 +442,10 @@
             const [showAddItem, setShowAddItem] = useState(false);
             const [editingStockItem, setEditingStockItem] = useState(null);
             const [newStockValue, setNewStockValue] = useState('');
+            const [editItemData, setEditItemData] = useState({name: '', price: '', wholesalePrice: ''});
+            const [showTopCustomers, setShowTopCustomers] = useState(false);
+            const [showEditPromoMsg, setShowEditPromoMsg] = useState(false);
+            const [promoMessage, setPromoMessage] = useState('انت من العملاء المميزين لدينا فى مكتب بولا عماد مبروك لقد ربحت قسيمه شراء ب 50 جنيه صالحه لمده شهر من تاريخ ارسال الرساله');
             const [passModal, setPassModal] = useState(null); 
             const [passForm, setPassForm] = useState({old: '', new: ''});
             const [payConfirmModal, setPayConfirmModal] = useState(null);
@@ -1466,6 +1470,20 @@
                                         <BellRing size={18}/>
                                         تنبيه المتأخرات (+3 أيام)
                                     </button>
+                                    <button 
+                                        onClick={() => setShowTopCustomers(true)}
+                                        className="flex-1 px-4 py-4 rounded-2xl font-black text-sm flex items-center justify-center gap-2 transition-all shadow-sm bg-indigo-50 text-indigo-600 hover:bg-indigo-100 border border-indigo-100"
+                                    >
+                                        <Star size={18}/>
+                                        أفضل 10 عملاء
+                                    </button>
+                                    <button 
+                                        onClick={() => setShowEditPromoMsg(true)}
+                                        className="flex-1 px-4 py-4 rounded-2xl font-black text-sm flex items-center justify-center gap-2 transition-all shadow-sm bg-amber-50 text-amber-600 hover:bg-amber-100 border border-amber-100"
+                                    >
+                                        <Edit size={18}/>
+                                        تعديل الرسالة
+                                    </button>
                                 </div>
                             </div>
 
@@ -1619,9 +1637,15 @@
                                             <Trash2 size={16}/>
                                         </button>
 
-                                        {(!item.isPrintingMaterial && !item.isPrinting) && (
-                                            <button onClick={() => { setEditingStockItem(item); setNewStockValue(item.stock); }} className="mt-4 bg-slate-900 text-white px-6 py-2 rounded-xl text-xs font-black shadow-lg hover:scale-105 transition w-full">تعديل المخزون</button>
-                                        )}
+                                        <button onClick={() => { 
+                                            setEditingStockItem(item); 
+                                            setNewStockValue(item.stock); 
+                                            setEditItemData({
+                                                name: item.name || '',
+                                                price: item.price || '',
+                                                wholesalePrice: item.wholesalePrice || item.price || ''
+                                            });
+                                        }} className="mt-4 bg-slate-900 text-white px-6 py-2 rounded-xl text-xs font-black shadow-lg hover:scale-105 transition w-full">تعديل الصنف</button>
                                     </div>
                                 ))}
 
@@ -1662,6 +1686,20 @@
                                     >
                                         <BellRing size={18}/>
                                         تنبيه المتأخرات (+3 أيام)
+                                    </button>
+                                    <button 
+                                        onClick={() => setShowTopCustomers(true)}
+                                        className="flex-1 px-4 py-4 rounded-2xl font-black text-sm flex items-center justify-center gap-2 transition-all shadow-sm bg-indigo-50 text-indigo-600 hover:bg-indigo-100 border border-indigo-100"
+                                    >
+                                        <Star size={18}/>
+                                        أفضل 10 عملاء
+                                    </button>
+                                    <button 
+                                        onClick={() => setShowEditPromoMsg(true)}
+                                        className="flex-1 px-4 py-4 rounded-2xl font-black text-sm flex items-center justify-center gap-2 transition-all shadow-sm bg-amber-50 text-amber-600 hover:bg-amber-100 border border-amber-100"
+                                    >
+                                        <Edit size={18}/>
+                                        تعديل الرسالة
                                     </button>
                                 </div>
                             </div>
@@ -1877,6 +1915,80 @@
                                     <button onClick={() => handleWithdrawCustomerWallet('wallet')} className="flex-1 bg-blue-600 hover:bg-blue-700 py-3 rounded-xl font-black transition text-white text-sm">سحب من محفظة اليوم</button>
                                 </div>
                                 <button onClick={()=>{setShowWithdrawModal(false); setWithdrawAmount('');}} className="w-full bg-slate-700 hover:bg-slate-600 py-3 rounded-xl font-black transition text-white">إلغاء</button>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* --- أفضل 10 عملاء --- */}
+                    {showTopCustomers && (() => {
+                        // Group by phone
+                        const byPhone = {};
+                        orders.forEach(o => {
+                            const phone = (o.customerPhone || '').trim();
+                            if (!phone) return;
+                            if (!byPhone[phone]) {
+                                byPhone[phone] = { phone, name: o.customerName, count: 0, total: 0 };
+                            }
+                            byPhone[phone].count += 1;
+                            byPhone[phone].total += (o.total || 0);
+                            // keep latest name
+                            if (o.customerName) byPhone[phone].name = o.customerName;
+                        });
+                        const top10 = Object.values(byPhone).sort((a,b) => b.count - a.count || b.total - a.total).slice(0, 10);
+
+                        return (
+                            <div className="fixed inset-0 bg-black/80 flex items-center justify-center p-2 md:p-4 z-[100]">
+                                <div className="bg-slate-50 rounded-[2rem] w-full max-w-2xl max-h-[90vh] shadow-2xl relative flex flex-col overflow-hidden">
+                                    <div className="bg-indigo-600 p-5 flex justify-between items-center text-white">
+                                        <div className="flex items-center gap-2">
+                                            <Star size={24}/>
+                                            <h2 className="text-xl font-black">أفضل 10 عملاء (حسب عدد المشتريات)</h2>
+                                        </div>
+                                        <button onClick={()=>setShowTopCustomers(false)} className="bg-indigo-700 p-2 rounded-xl hover:bg-indigo-800"><X size={20}/></button>
+                                    </div>
+                                    <div className="flex-1 overflow-y-auto p-4 space-y-3">
+                                        {top10.length === 0 ? (
+                                            <div className="text-center py-16 text-slate-400 font-black">لا توجد بيانات كافية</div>
+                                        ) : top10.map((c, idx) => (
+                                            <div key={c.phone} className="bg-white p-4 rounded-2xl border border-slate-100 flex flex-col sm:flex-row justify-between items-center gap-3 shadow-sm">
+                                                <div className="flex items-center gap-3 w-full sm:w-auto">
+                                                    <div className="bg-indigo-100 text-indigo-700 w-10 h-10 rounded-full flex items-center justify-center font-black text-lg">{idx+1}</div>
+                                                    <div>
+                                                        <div className="font-black text-slate-800">{c.name || 'بدون اسم'}</div>
+                                                        <div className="text-xs text-slate-400 font-bold">{c.phone}</div>
+                                                        <div className="text-xs text-indigo-500 font-bold mt-1">{c.count} عملية | إجمالي {c.total} ج</div>
+                                                    </div>
+                                                </div>
+                                                <button 
+                                                    onClick={() => {
+                                                        window.open(`https://wa.me/2${c.phone}?text=${encodeURIComponent(promoMessage)}`, '_blank');
+                                                    }}
+                                                    className="w-full sm:w-auto bg-emerald-500 hover:bg-emerald-600 text-white px-5 py-3 rounded-xl font-black text-sm flex items-center justify-center gap-2 transition shadow-md"
+                                                >
+                                                    <Send size={16}/> إرسال الرسالة
+                                                </button>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            </div>
+                        );
+                    })()}
+
+                    {/* --- تعديل رسالة الترويج --- */}
+                    {showEditPromoMsg && (
+                        <div className="fixed inset-0 bg-black/80 flex items-center justify-center p-4 z-[110]">
+                            <div className="bg-white rounded-[2.5rem] p-8 w-full max-w-md shadow-2xl">
+                                <h3 className="text-xl font-black text-center mb-4 text-slate-800">تعديل رسالة العملاء المميزين</h3>
+                                <textarea 
+                                    className="w-full p-4 bg-slate-50 rounded-2xl mb-6 text-right font-bold text-slate-700 border-2 border-slate-200 focus:border-amber-400 outline-none h-40 resize-none"
+                                    value={promoMessage}
+                                    onChange={e=>setPromoMessage(e.target.value)}
+                                />
+                                <div className="flex gap-2">
+                                    <button onClick={()=>setShowEditPromoMsg(false)} className="flex-1 bg-amber-500 hover:bg-amber-600 text-white py-3 rounded-xl font-black">حفظ</button>
+                                    <button onClick={()=>setShowEditPromoMsg(false)} className="flex-1 bg-slate-200 text-slate-500 py-3 rounded-xl font-black">إغلاق</button>
+                                </div>
                             </div>
                         </div>
                     )}
@@ -2270,15 +2382,43 @@
                     {editingStockItem && (
                         <div className="fixed inset-0 bg-black/80 flex items-center justify-center p-4 z-50">
                             <div className="bg-white rounded-[2.5rem] p-8 w-full max-w-sm shadow-2xl relative text-center">
-                                <h3 className="font-black text-xl mb-4 text-slate-800">تعديل مخزون: {editingStockItem.name}</h3>
-                                <input type="number" className="w-full p-4 bg-slate-100 rounded-2xl mb-6 text-center font-black text-2xl border-2 border-transparent focus:border-emerald-500 outline-none" value={newStockValue} onChange={e => setNewStockValue(e.target.value)} autoFocus />
+                                <h3 className="font-black text-xl mb-6 text-slate-800">تعديل الصنف</h3>
+                                
+                                <label className="text-xs font-black text-slate-500 block mb-1 text-right">اسم الصنف</label>
+                                <input className="w-full p-3 bg-slate-100 rounded-xl mb-4 text-center font-black border-2 border-transparent focus:border-emerald-500 outline-none" value={editItemData.name} onChange={e => setEditItemData({...editItemData, name: e.target.value})} />
+                                
+                                <div className="grid grid-cols-2 gap-3 mb-4">
+                                    <div>
+                                        <label className="text-xs font-black text-slate-500 block mb-1">سعر القطاعي</label>
+                                        <input type="number" className="w-full p-3 bg-slate-100 rounded-xl text-center font-black border-2 border-transparent focus:border-emerald-500 outline-none" value={editItemData.price} onChange={e => setEditItemData({...editItemData, price: e.target.value})} />
+                                    </div>
+                                    <div>
+                                        <label className="text-xs font-black text-slate-500 block mb-1">سعر الجملة</label>
+                                        <input type="number" className="w-full p-3 bg-slate-100 rounded-xl text-center font-black border-2 border-transparent focus:border-amber-400 outline-none" value={editItemData.wholesalePrice} onChange={e => setEditItemData({...editItemData, wholesalePrice: e.target.value})} />
+                                    </div>
+                                </div>
+
+                                {(!editingStockItem.isPrintingMaterial && !editingStockItem.isPrinting) && (
+                                    <>
+                                        <label className="text-xs font-black text-slate-500 block mb-1">المخزون</label>
+                                        <input type="number" className="w-full p-3 bg-slate-100 rounded-xl mb-6 text-center font-black text-xl border-2 border-transparent focus:border-emerald-500 outline-none" value={newStockValue} onChange={e => setNewStockValue(e.target.value)} />
+                                    </>
+                                )}
+
                                 <div className="flex gap-2">
                                     <button onClick={async () => {
-                                            const val = parseInt(newStockValue);
-                                            if (!isNaN(val)) {
-                                                await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'inventory', editingStockItem.id), { stock: val });
-                                                setEditingStockItem(null);
-                                            } else { alert("يرجى إدخال رقم صحيح"); }
+                                            if (!editItemData.name.trim() || !editItemData.price) return alert("الاسم والسعر مطلوبين");
+                                            const updates = {
+                                                name: editItemData.name.trim(),
+                                                price: parseFloat(editItemData.price),
+                                                wholesalePrice: parseFloat(editItemData.wholesalePrice) || parseFloat(editItemData.price)
+                                            };
+                                            if (!editingStockItem.isPrintingMaterial && !editingStockItem.isPrinting) {
+                                                const val = parseInt(newStockValue);
+                                                if (!isNaN(val)) updates.stock = val;
+                                            }
+                                            await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'inventory', editingStockItem.id), updates);
+                                            setEditingStockItem(null);
                                         }} className="flex-1 bg-emerald-600 text-white py-3 rounded-xl font-black shadow-lg hover:bg-emerald-700 transition">حفظ</button>
                                     <button onClick={() => setEditingStockItem(null)} className="flex-1 bg-slate-200 text-slate-500 py-3 rounded-xl font-black hover:bg-slate-300 transition">إلغاء</button>
                                 </div>
