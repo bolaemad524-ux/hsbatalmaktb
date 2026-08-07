@@ -374,6 +374,10 @@
                         <div className="flex gap-2 mb-4">
                             <button onClick={()=>setTab('statement')} className={`flex-1 py-3 rounded-xl font-black text-sm transition ${tab==='statement'?'bg-emerald-600 text-white':'bg-slate-800 text-slate-400'}`}>كشف الحساب</button>
                             <button onClick={()=>setTab('prices')} className={`flex-1 py-3 rounded-xl font-black text-sm transition ${tab==='prices'?'bg-amber-500 text-white':'bg-slate-800 text-slate-400'}`}>أسعارك الخاصة بالمكتب</button>
+                            <button onClick={()=>{
+                                const base = window.location.href.split('?')[0];
+                                window.location.href = base + '?view=rating&cname=' + encodeURIComponent(displayName||'') + '&cphone=' + encodeURIComponent(cphone||'');
+                            }} className="px-3 py-3 rounded-xl bg-amber-500/20 text-amber-400 hover:bg-amber-500 hover:text-white transition font-black text-xs" title="التقييم">⭐ التقييم</button>
                             <button onClick={()=>{setShowChangePin(true); setNewPin(''); setConfirmPin('');}} className="px-3 py-3 rounded-xl bg-slate-800 text-slate-400 hover:text-white transition" title="تغيير الرقم السري">🔑</button>
                         </div>
 
@@ -873,10 +877,11 @@
                 const isWholesaleCust = customers.some(c => c.name === cName || c.phone === cPhone);
                 const currentUrl = window.location.href.split('?')[0];
                 const ratingLink = `${currentUrl}?view=rating&cname=${encodeURIComponent(cName||'')}&cphone=${cPhone||''}`;
+                const statementLink = `${currentUrl}?view=statement&phone=${encodeURIComponent(cPhone||'')}&cname=${encodeURIComponent(cName||'')}`;
                 const ratingMsg = `\nمتنساش تقيمنا من خلال الرابط ده عشان تساعدنا فى تطوير خدمتنا ✨👇\n${ratingLink}`;
                 
                 if (isWholesaleCust) {
-                    return ratingMsg; 
+                    return `\n\nتابع حسباتك واسعارك من مكتب بولا من خلال رابط البرنامج الخاص بيك ✨👇\n${statementLink}`; 
                 }
                 
                 const retailMarketingMsg = `\nمتنساش تتابع صفحتنا على الفيس بوك ✨👇\nhttps://www.facebook.com/share/18o6vPJTep/\nوخلي المتجر معاك وتابع أقوى الخصومات 🔥😉👇\nhttps://bolaemad524-ux.github.io/matheronline-/?store=store_1773991337877 🔗`;
