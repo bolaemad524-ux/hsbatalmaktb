@@ -884,7 +884,9 @@
                     return `\n\nتابع حسباتك واسعارك من مكتب بولا من خلال رابط البرنامج الخاص بيك ✨👇\n${statementLink}`; 
                 }
                 
-                const retailMarketingMsg = `\nمتنساش تتابع صفحتنا على الفيس بوك ✨👇\nhttps://www.facebook.com/share/18o6vPJTep/\nوخلي المتجر معاك وتابع أقوى الخصومات 🔥😉👇\nhttps://bolaemad524-ux.github.io/matheronline-/?store=store_1773991337877 🔗`;
+                const retailMarketingMsg = appSettings.retailFooterMsg 
+                    ? `\n${appSettings.retailFooterMsg}` 
+                    : `\nمتنساش تتابع صفحتنا على الفيس بوك ✨👇\nhttps://www.facebook.com/share/18o6vPJTep/\nوخلي المتجر معاك وتابع أقوى الخصومات 🔥😉👇\nhttps://bolaemad524-ux.github.io/matheronline-/?store=store_1773991337877 🔗`;
                 return retailMarketingMsg + ratingMsg;
             };
 
@@ -1651,7 +1653,41 @@
                         </div>
                     )}
 
-                    {tab === 'sales' && (
+                    {
+                            {tab === 'settings' && (
+                                <div className="space-y-6 animate-in slide-in-from-bottom duration-300">
+                                    <div className="bg-white p-6 rounded-[2.5rem] border border-slate-100 shadow-sm">
+                                        <h3 className="text-lg font-black text-slate-800 mb-2 flex items-center gap-2">
+                                            <Edit size={20}/> تعديل رسالة الفاتورة (عملاء القطاعي)
+                                        </h3>
+                                        <p className="text-xs text-slate-400 font-bold mb-4">الرسالة دي بتتبعت في آخر فاتورة واتساب لعملاء القطاعي (رابط التقييم بيتضاف تلقائي في الآخر)</p>
+                                        <textarea 
+                                            className="w-full p-4 bg-slate-50 rounded-2xl font-bold text-sm text-slate-700 border-2 border-slate-200 focus:border-indigo-400 outline-none h-48 resize-none leading-relaxed"
+                                            value={appSettings.retailFooterMsg !== undefined ? appSettings.retailFooterMsg : `متنساش تتابع صفحتنا على الفيس بوك ✨👇
+https://www.facebook.com/share/18o6vPJTep/
+وخلي المتجر معاك وتابع أقوى الخصومات 🔥😉👇
+https://bolaemad524-ux.github.io/matheronline-/?store=store_1773991337877 🔗`}
+                                            onChange={e => setAppSettings({...appSettings, retailFooterMsg: e.target.value})}
+                                        />
+                                        <button 
+                                            onClick={async () => {
+                                                try {
+                                                    await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'app_settings', 'config'), {
+                                                        ...appSettings,
+                                                        retailFooterMsg: appSettings.retailFooterMsg || ''
+                                                    }, { merge: true });
+                                                    alert('تم حفظ الرسالة ✅');
+                                                } catch(err) { alert('خطأ في الحفظ'); }
+                                            }}
+                                            className="mt-4 w-full bg-indigo-600 hover:bg-indigo-700 text-white py-4 rounded-2xl font-black shadow-lg transition"
+                                        >
+                                            حفظ الرسالة
+                                        </button>
+                                    </div>
+                                </div>
+                            )}
+
+tab === 'sales' && (
                         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 animate-in fade-in duration-300">
                             <div className="lg:col-span-2">
                                 <div className="flex gap-2 mb-4 flex-wrap">
