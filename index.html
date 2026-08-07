@@ -205,6 +205,7 @@
             const [customerDoc, setCustomerDoc] = useState(null);
             const [loading, setLoading] = useState(true);
             const [pinInput, setPinInput] = useState('');
+          const [retailFooterDraft, setRetailFooterDraft] = useState(null);
             const [isUnlocked, setIsUnlocked] = useState(false);
             const [needSetPin, setNeedSetPin] = useState(false);
             const [newPin, setNewPin] = useState('');
@@ -497,6 +498,7 @@
               commissionRate: 1 
           });
           const [pinInput, setPinInput] = useState('');
+          const [retailFooterDraft, setRetailFooterDraft] = useState(null);
           
           const [items, setItems] = useState([]);
           const [orders, setOrders] = useState([]);
@@ -1662,18 +1664,28 @@
                                         <p className="text-xs text-slate-400 font-bold mb-4">الرسالة دي بتتبعت في آخر فاتورة واتساب لعملاء القطاعي (رابط التقييم بيتضاف تلقائي في الآخر)</p>
                                         <textarea 
                                             className="w-full p-4 bg-slate-50 rounded-2xl font-bold text-sm text-slate-700 border-2 border-slate-200 focus:border-indigo-400 outline-none h-48 resize-none leading-relaxed"
-                                            value={appSettings.retailFooterMsg !== undefined ? appSettings.retailFooterMsg : "متنساش تتابع صفحتنا على الفيس بوك ✨👇\nhttps://www.facebook.com/share/18o6vPJTep/\nوخلي المتجر معاك وتابع أقوى الخصومات 🔥😉👇\nhttps://bolaemad524-ux.github.io/matheronline-/?store=store_1773991337877 🔗"}
-                                            onChange={e => setAppSettings({...appSettings, retailFooterMsg: e.target.value})}
+                                            value={retailFooterDraft !== null ? retailFooterDraft : (appSettings.retailFooterMsg || "متنساش تتابع صفحتنا على الفيس بوك ✨👇\nhttps://www.facebook.com/share/18o6vPJTep/\nوخلي المتجر معاك وتابع أقوى الخصومات 🔥😉👇\nhttps://bolaemad524-ux.github.io/matheronline-/?store=store_1773991337877 🔗")}
+                                            onChange={e => setRetailFooterDraft(e.target.value)}
+                                            onFocus={() => {
+                                                if (retailFooterDraft === null) {
+                                                    setRetailFooterDraft(appSettings.retailFooterMsg || "متنساش تتابع صفحتنا على الفيس بوك ✨👇\nhttps://www.facebook.com/share/18o6vPJTep/\nوخلي المتجر معاك وتابع أقوى الخصومات 🔥😉👇\nhttps://bolaemad524-ux.github.io/matheronline-/?store=store_1773991337877 🔗");
+                                                }
+                                            }}
                                         />
                                         <button 
                                             onClick={async () => {
                                                 try {
-                                                    await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'app_settings', 'config'), {
-                                                        ...appSettings,
-                                                        retailFooterMsg: appSettings.retailFooterMsg || ''
+                                                    const msg = retailFooterDraft !== null ? retailFooterDraft : (appSettings.retailFooterMsg || '');
+                                                    await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'app_settings', 'general'), {
+                                                        retailFooterMsg: msg
                                                     }, { merge: true });
+                                                    setAppSettings(prev => ({...prev, retailFooterMsg: msg}));
+                                                    setRetailFooterDraft(null);
                                                     alert('تم حفظ الرسالة ✅');
-                                                } catch(err) { alert('خطأ في الحفظ'); }
+                                                } catch(err) { 
+                                                    console.error(err);
+                                                    alert('خطأ في الحفظ'); 
+                                                }
                                             }}
                                             className="mt-4 w-full bg-indigo-600 hover:bg-indigo-700 text-white py-4 rounded-2xl font-black shadow-lg transition"
                                         >
