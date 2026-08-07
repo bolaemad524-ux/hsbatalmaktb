@@ -1570,7 +1570,7 @@
                                         else if (activeCategory === 'printing') matchCat = i.isPrintingMaterial;
                                         else if (activeCategory === 'other') matchCat = !i.isLaser && !i.isPrintingMaterial;
                                         return matchSearch && matchCat;
-                                    }).map(item => {
+                                    }).sort((a,b) => (a.name||'').localeCompare(b.name||'', 'ar')).map(item => {
                                         const price = isWholesale ? (item.wholesalePrice || item.price) : item.price;
                                         return (
                                             <button key={item.id} onClick={()=> handleItemClick(item)} className="bg-white p-6 rounded-[2rem] border border-slate-100 shadow-sm hover:shadow-md transition text-center relative group">
@@ -1807,6 +1807,7 @@
                                 {items
                                     .filter(i => i.name.includes(itemsSearch))
                                     .filter(i => showLowStock ? (!i.isPrintingMaterial && !i.isPrinting && i.stock < 5) : true)
+                                    .sort((a,b) => (a.name||'').localeCompare(b.name||'', 'ar'))
                                     .map(item => (
                                     <div key={item.id} className={`bg-white p-6 rounded-3xl shadow-sm border relative group flex flex-col justify-between min-h-[160px] transition-all ${item.stock < 5 && !item.isPrintingMaterial && !item.isPrinting ? 'border-red-200 bg-red-50/30' : 'border-slate-100'}`}>
                                         <div className="absolute top-4 left-4 text-slate-300">
@@ -2348,7 +2349,8 @@
                                         </div>
                                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
                                             {employees.map(emp => {
-                                                const empOrders = orders.filter(o => o.employeeName === emp.name);
+                                                const resetAt = emp.commissionClearedAt || 0;
+                                                const empOrders = orders.filter(o => o.employeeName === emp.name && (o.createdAt?.seconds || 0) >= resetAt);
                                                 const paidOrders = empOrders.filter(o => o.remaining === 0);
                                                 
                                                 const salesCount = empOrders.length;
@@ -2359,7 +2361,21 @@
                                                     <div key={emp.id} className="bg-white p-4 rounded-2xl border border-slate-200 hover:shadow-md transition group">
                                                         <div className="flex justify-between items-start mb-2">
                                                             <div className="font-black text-slate-800">{emp.name}</div>
-                                                            <button onClick={()=>deleteDoc(doc(db,'artifacts',appId,'public','data','employees',emp.id))} className="text-slate-300 hover:text-red-500"><X size={16}/></button>
+                                                            <div className="flex gap-1">
+                                                                <button 
+                                                                    onClick={async () => {
+                                                                        if (!window.confirm(`تصفير عمولة ${emp.name}؟ هتبدأ الحساب من دلوقتي.`)) return;
+                                                                        await updateDoc(doc(db,'artifacts',appId,'public','data','employees',emp.id), {
+                                                                            commissionClearedAt: Math.floor(Date.now()/1000)
+                                                                        });
+                                                                    }}
+                                                                    className="text-[10px] font-black bg-amber-50 text-amber-700 px-2 py-1 rounded-lg hover:bg-amber-100 transition"
+                                                                    title="تصفير الحساب"
+                                                                >
+                                                                    تصفير الحساب
+                                                                </button>
+                                                                <button onClick={()=>deleteDoc(doc(db,'artifacts',appId,'public','data','employees',emp.id))} className="text-slate-300 hover:text-red-500"><X size={16}/></button>
+                                                            </div>
                                                         </div>
                                                         <div className="space-y-1 text-xs">
                                                             <div className="flex justify-between text-slate-500 font-bold"><span>إجمالي الطلبات:</span><span>{salesCount}</span></div>
@@ -2479,6 +2495,38 @@
                                                         <div className="text-3xl font-black text-slate-800">{totalInc - totalExp} ج</div>
                                                     </div>
                                                 </div>
+
+                                                {(() => {
+                                                    const monthsData = Array.from({length: 12}, (_, i) => {
+                                                        const monthNum = (i + 1).toString().padStart(2, '0');
+                                                        const monthKey = `${reportYear}-${monthNum}`;
+                                                        const mOrders = yearOrders.filter(o => o.dateString.startsWith(monthKey));
+                                                        const mExpenses = yearExpenses.filter(e => e.dateString.startsWith(monthKey));
+                                                        const mDebtPays = yearDebtPays.filter(dp => dp.dateString.startsWith(monthKey));
+                                                        const mInc = mOrders.reduce((s,o) => s + (o.initialPaid !== undefined ? o.initialPaid : o.paid), 0) + mDebtPays.reduce((s,d) => s + d.amount, 0);
+                                                        const mExp = mExpenses.reduce((s,e)=>s+e.amount,0);
+                                                        return { i, mInc, mExp, mNet: mInc - mExp, monthName: new Date(reportYear, i).toLocaleString('ar-EG', { month: 'short' }) };
+                                                    });
+                                                    const maxInc = Math.max(...monthsData.map(m => m.mInc), 1);
+                                                    return (
+                                                <div className="mb-8 bg-slate-50 p-6 rounded-[2rem] border border-slate-200">
+                                                    <h4 className="text-sm font-black text-slate-600 mb-4 text-center">رسم بياني للمبيعات الشهرية {reportYear}</h4>
+                                                    <div className="flex items-end justify-between gap-1 h-40 px-1">
+                                                        {monthsData.map(m => (
+                                                            <div key={m.i} className="flex-1 flex flex-col items-center gap-1 h-full justify-end">
+                                                                <div className="text-[9px] font-black text-emerald-600">{m.mInc > 0 ? m.mInc : ''}</div>
+                                                                <div 
+                                                                    className={`w-full rounded-t-lg transition-all ${m.mInc > 0 ? 'bg-emerald-500 hover:bg-emerald-600' : 'bg-slate-200'}`}
+                                                                    style={{height: `${Math.max(4, (m.mInc / maxInc) * 100)}%`}}
+                                                                    title={`${m.monthName}: ${m.mInc} ج`}
+                                                                />
+                                                                <div className="text-[9px] font-bold text-slate-500">{m.monthName}</div>
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                </div>
+                                                    );
+                                                })()}
 
                                                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                                                     {Array.from({length: 12}, (_, i) => {
