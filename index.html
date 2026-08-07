@@ -200,23 +200,34 @@
             const cname = urlParams.get('cname') || '';
 
             const [orders, setOrders] = useState([]);
+            const [items, setItems] = useState([]);
             const [walletBalance, setWalletBalance] = useState(0);
+            const [customerDoc, setCustomerDoc] = useState(null);
             const [loading, setLoading] = useState(true);
+            const [pinInput, setPinInput] = useState('');
+            const [isUnlocked, setIsUnlocked] = useState(false);
+            const [needSetPin, setNeedSetPin] = useState(false);
+            const [newPin, setNewPin] = useState('');
+            const [confirmPin, setConfirmPin] = useState('');
+            const [showChangePin, setShowChangePin] = useState(false);
+            const [tab, setTab] = useState('statement'); // statement | prices
+            const [priceSearch, setPriceSearch] = useState('');
+
+            const ADMIN_PIN = '3316';
 
             useEffect(() => {
-                if (!cphone && !cname) {
-                    setLoading(false);
-                    return;
-                }
+                if (!cphone && !cname) { setLoading(false); return; }
                 const unsubOrders = onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', 'orders'), snap => {
                     const all = snap.docs.map(d => ({id: d.id, ...d.data()}));
                     const filtered = all.filter(o => {
-                        if (cphone && o.customerPhone && (o.customerPhone === cphone || o.customerPhone.includes(cphone.replace(/^0/, '')) || cphone.includes(o.customerPhone.replace(/^0/, '')))) return true;
+                        if (cphone && o.customerPhone && (o.customerPhone === cphone || o.customerPhone.includes(cphone.replace(/^0/, '')) || cphone.includes((o.customerPhone||'').replace(/^0/, '')))) return true;
                         if (cname && o.customerName === cname) return true;
                         return false;
                     }).sort((a,b) => (b.createdAt?.seconds||0) - (a.createdAt?.seconds||0));
                     setOrders(filtered);
-                    setLoading(false);
+                });
+                const unsubItems = onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', 'inventory'), snap => {
+                    setItems(snap.docs.map(d => ({id: d.id, ...d.data()})).sort((a,b) => (a.name||'').localeCompare(b.name||'', 'ar')));
                 });
                 const unsubCust = onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', 'wholesale_customers'), snap => {
                     const list = snap.docs.map(d => ({id: d.id, ...d.data()}));
@@ -224,14 +235,53 @@
                         (cphone && c.phone && (c.phone === cphone || c.phone.includes(cphone.replace(/^0/, '')) || cphone.includes((c.phone||'').replace(/^0/, '')))) ||
                         (cname && c.name === cname)
                     );
-                    if (found) setWalletBalance(found.walletBalance || 0);
+                    if (found) {
+                        setCustomerDoc(found);
+                        setWalletBalance(found.walletBalance || 0);
+                        if (!found.clientPin) setNeedSetPin(true);
+                    }
+                    setLoading(false);
                 });
-                return () => { unsubOrders(); unsubCust(); };
+                return () => { unsubOrders(); unsubItems(); unsubCust(); };
             }, [cphone, cname]);
+
+            const handlePinLogin = () => {
+                if (pinInput === ADMIN_PIN) { setIsUnlocked(true); setPinInput(''); return; }
+                if (customerDoc && customerDoc.clientPin && String(pinInput) === String(customerDoc.clientPin)) {
+                    setIsUnlocked(true); setPinInput(''); return;
+                }
+                alert('الرقم السري غير صحيح');
+                setPinInput('');
+            };
+
+            const handleSetPin = async () => {
+                if (newPin.length < 4) return alert('الرقم السري يجب أن يكون 4 أرقام على الأقل');
+                if (newPin !== confirmPin) return alert('الرقمان غير متطابقين');
+                if (!customerDoc) return alert('لم يتم العثور على حساب العميل');
+                try {
+                    await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'wholesale_customers', customerDoc.id), { clientPin: newPin });
+                    setNeedSetPin(false);
+                    setIsUnlocked(true);
+                    setNewPin(''); setConfirmPin('');
+                    alert('تم حفظ الرقم السري بنجاح ✅');
+                } catch(e) { alert('حدث خطأ'); }
+            };
+
+            const handleChangePin = async () => {
+                if (newPin.length < 4) return alert('الرقم السري يجب أن يكون 4 أرقام على الأقل');
+                if (newPin !== confirmPin) return alert('الرقمان غير متطابقين');
+                if (!customerDoc) return;
+                try {
+                    await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'wholesale_customers', customerDoc.id), { clientPin: newPin });
+                    setShowChangePin(false);
+                    setNewPin(''); setConfirmPin('');
+                    alert('تم تغيير الرقم السري ✅');
+                } catch(e) { alert('حدث خطأ'); }
+            };
 
             const unpaid = orders.filter(o => o.remaining > 0);
             const totalDebt = unpaid.reduce((s,o) => s + (o.remaining||0), 0);
-            const displayName = cname || (orders[0]?.customerName) || 'عميل';
+            const displayName = cname || customerDoc?.name || (orders[0]?.customerName) || 'عميل';
             const currentYear = new Date().getFullYear().toString();
             const yearOrders = orders.filter(o => (o.dateString || '').startsWith(currentYear));
             const yearTotal = yearOrders.reduce((s,o) => s + (o.total || 0), 0);
@@ -239,45 +289,23 @@
             const yearCount = yearOrders.length;
 
             const buildWhatsAppMsg = () => {
-                let msg = `*كشف حساب - استوديو بولا عماد*\n`;
-                msg += `العميل: ${displayName}\n`;
-                msg += `الهاتف: ${cphone}\n`;
-                msg += `================\n\n`;
-                
-                if (unpaid.length === 0) {
-                    msg += `الحساب خالص ✅ مفيش مديونيات\n`;
-                } else {
+                let msg = `*كشف حساب - استوديو بولا عماد*\nالعميل: ${displayName}\nالهاتف: ${cphone}\n================\n\n`;
+                if (unpaid.length === 0) msg += `الحساب خالص ✅ مفيش مديونيات\n`;
+                else {
                     unpaid.forEach(o => {
                         msg += `*فاتورة بتاريخ ${o.dateString}*\n`;
-                        (o.items||[]).forEach(item => {
-                            msg += `• ${item.name} (x${item.qty}) = ${(item.qty * item.currentPrice).toFixed(0)}ج\n`;
-                        });
+                        (o.items||[]).forEach(item => { msg += `• ${item.name} (x${item.qty}) = ${(item.qty * item.currentPrice).toFixed(0)}ج\n`; });
                         msg += `الإجمالي: ${o.total}ج | المدفوع: ${o.paid}ج | *الباقي: ${o.remaining}ج*\n\n`;
                     });
-                    msg += `================\n`;
-                    msg += `*إجمالي المديونية: ${totalDebt} ج*\n`;
+                    msg += `================\n*إجمالي المديونية: ${totalDebt} ج*\n`;
                 }
-
                 const allItems = [];
-                unpaid.forEach(o => {
-                    (o.items||[]).forEach(item => {
-                        allItems.push(`• ${item.name} × ${item.qty}`);
-                    });
-                });
+                unpaid.forEach(o => { (o.items||[]).forEach(item => { allItems.push(`• ${item.name} × ${item.qty}`); }); });
                 if (allItems.length > 0) {
-                    msg += `\n\n================\n`;
-                    msg += `*📦 الأوردرات اللي هيستلمها الدليفري:*\n\n`;
-                    msg += allItems.join('\n');
-                    msg += `\n================`;
+                    msg += `\n\n================\n*📦 الأوردرات اللي هيستلمها الدليفري:*\n\n` + allItems.join('\n') + `\n================`;
                 }
-
                 msg += `\n\nمن فضلك راجع الكشف وأخبرنا بالاستلام.`;
                 return msg;
-            };
-
-            const sendToStudio = () => {
-                const msg = buildWhatsAppMsg();
-                window.open(`https://wa.me/201285957035?text=${encodeURIComponent(msg)}`, '_blank');
             };
 
             if (loading) {
@@ -296,10 +324,46 @@
                 );
             }
 
+            // First time: set PIN
+            if (needSetPin && !isUnlocked) {
+                return (
+                    <div className="min-h-screen bg-slate-900 flex flex-col items-center justify-center p-6" dir="rtl">
+                        <div className="bg-slate-800 p-8 rounded-[2.5rem] w-full max-w-sm border border-slate-700 text-center">
+                            <div className="text-4xl mb-4">🔐</div>
+                            <h2 className="text-xl font-black text-white mb-2">أهلاً {displayName}</h2>
+                            <p className="text-slate-400 text-sm font-bold mb-6">أدخل رقم سري جديد خاص بك لحماية حسابك</p>
+                            <input type="password" className="w-full p-4 bg-slate-900 rounded-xl mb-3 text-center text-2xl font-black text-white border border-slate-600 outline-none focus:border-emerald-500" placeholder="الرقم السري الجديد" value={newPin} onChange={e=>setNewPin(e.target.value)} />
+                            <input type="password" className="w-full p-4 bg-slate-900 rounded-xl mb-6 text-center text-2xl font-black text-white border border-slate-600 outline-none focus:border-emerald-500" placeholder="تأكيد الرقم السري" value={confirmPin} onChange={e=>setConfirmPin(e.target.value)} />
+                            <button onClick={handleSetPin} className="w-full bg-emerald-600 text-white py-4 rounded-xl font-black text-lg">حفظ الرقم السري</button>
+                            <p className="text-slate-500 text-xs mt-4 font-bold">أو استخدم رقم الأدمن للدخول مرة واحدة</p>
+                            <input type="password" className="w-full p-3 bg-slate-900 rounded-xl mt-2 text-center font-black text-white border border-slate-600 outline-none" placeholder="رقم الأدمن" value={pinInput} onChange={e=>setPinInput(e.target.value)} onKeyDown={e=>e.key==='Enter'&&handlePinLogin()} />
+                            <button onClick={handlePinLogin} className="w-full bg-slate-700 text-white py-3 rounded-xl font-black mt-2 text-sm">دخول برقم الأدمن</button>
+                        </div>
+                    </div>
+                );
+            }
+
+            // PIN login
+            if (!isUnlocked) {
+                return (
+                    <div className="min-h-screen bg-slate-900 flex flex-col items-center justify-center p-6" dir="rtl">
+                        <div className="bg-slate-800 p-8 rounded-[2.5rem] w-full max-w-sm border border-slate-700 text-center">
+                            <div className="text-4xl mb-4">🔒</div>
+                            <h2 className="text-xl font-black text-white mb-2">أهلاً {displayName}</h2>
+                            <p className="text-slate-400 text-sm font-bold mb-6">أدخل الرقم السري للدخول</p>
+                            <input type="password" autoFocus className="w-full p-4 bg-slate-900 rounded-xl mb-4 text-center text-3xl font-black text-white border border-slate-600 outline-none focus:border-emerald-500" placeholder="****" value={pinInput} onChange={e=>setPinInput(e.target.value)} onKeyDown={e=>e.key==='Enter'&&handlePinLogin()} />
+                            <button onClick={handlePinLogin} className="w-full bg-emerald-600 text-white py-4 rounded-xl font-black text-lg">دخول</button>
+                        </div>
+                    </div>
+                );
+            }
+
+            const filteredItems = items.filter(i => (i.name||'').includes(priceSearch));
+
             return (
-                <div className="min-h-screen bg-slate-900 text-white p-4 md:p-8" dir="rtl">
+                <div className="min-h-screen bg-slate-900 text-white p-4 md:p-6" dir="rtl">
                     <div className="max-w-lg mx-auto">
-                        <div className="bg-gradient-to-l from-emerald-600 to-indigo-600 rounded-[2rem] p-5 mb-6 text-center shadow-xl">
+                        <div className="bg-gradient-to-l from-emerald-600 to-indigo-600 rounded-[2rem] p-5 mb-4 text-center shadow-xl">
                             <p className="text-white/90 text-sm font-bold leading-relaxed">
                                 هذا البرنامج إهداء ليك من مكتب بولا عماد<br/>
                                 بالتوفيق والنجاح يا <span className="font-black text-yellow-300 text-base">{displayName}</span><br/>
@@ -307,11 +371,32 @@
                             </p>
                         </div>
 
-                        <div className="text-center mb-6">
-                            <h1 className="text-2xl font-black text-emerald-400 mb-1">استوديو بولا عماد</h1>
-                            <p className="text-slate-400 font-bold text-sm">كشف حساب العميل</p>
+                        <div className="flex gap-2 mb-4">
+                            <button onClick={()=>setTab('statement')} className={`flex-1 py-3 rounded-xl font-black text-sm transition ${tab==='statement'?'bg-emerald-600 text-white':'bg-slate-800 text-slate-400'}`}>كشف الحساب</button>
+                            <button onClick={()=>setTab('prices')} className={`flex-1 py-3 rounded-xl font-black text-sm transition ${tab==='prices'?'bg-amber-500 text-white':'bg-slate-800 text-slate-400'}`}>أسعارك الخاصة بالمكتب</button>
+                            <button onClick={()=>{setShowChangePin(true); setNewPin(''); setConfirmPin('');}} className="px-3 py-3 rounded-xl bg-slate-800 text-slate-400 hover:text-white transition" title="تغيير الرقم السري">🔑</button>
                         </div>
 
+                        {tab === 'prices' && (
+                            <div className="space-y-4">
+                                <h2 className="text-lg font-black text-amber-400">أسعارك الخاصة بالمكتب (جملة)</h2>
+                                <div className="relative">
+                                    <input className="w-full p-3 pr-10 bg-slate-800 rounded-xl font-bold text-white border border-slate-700 outline-none focus:border-amber-500" placeholder="ابحث عن صنف..." value={priceSearch} onChange={e=>setPriceSearch(e.target.value)} />
+                                </div>
+                                <div className="space-y-2 max-h-[60vh] overflow-y-auto">
+                                    {filteredItems.map(item => (
+                                        <div key={item.id} className="bg-slate-800 p-4 rounded-2xl border border-slate-700 flex justify-between items-center">
+                                            <div className="font-black text-sm">{item.name}</div>
+                                            <div className="font-black text-amber-400 text-lg">{item.wholesalePrice || item.price} ج</div>
+                                        </div>
+                                    ))}
+                                    {filteredItems.length === 0 && <div className="text-center text-slate-500 py-10 font-bold">لا توجد أصناف</div>}
+                                </div>
+                            </div>
+                        )}
+
+                        {tab === 'statement' && (
+                            <>
                         <div className="bg-slate-800 rounded-[2rem] p-6 mb-6 border border-slate-700">
                             <div className="font-black text-xl mb-1">{displayName}</div>
                             <div className="text-sm text-slate-400 font-bold mb-4">{cphone}</div>
@@ -340,9 +425,7 @@
                         <h3 className="font-black text-lg mb-3 text-slate-300">سجل المشتريات خلال السنة</h3>
                         <div className="space-y-3 mb-8 max-h-[50vh] overflow-y-auto">
                             {yearOrders.length === 0 ? (
-                                <div className="bg-slate-800 border border-slate-700 rounded-2xl p-8 text-center text-slate-400 font-bold">
-                                    لا توجد عمليات هذه السنة
-                                </div>
+                                <div className="bg-slate-800 border border-slate-700 rounded-2xl p-8 text-center text-slate-400 font-bold">لا توجد عمليات هذه السنة</div>
                             ) : yearOrders.map(o => (
                                 <div key={o.id} className={`rounded-2xl p-4 border ${o.remaining > 0 ? 'bg-red-500/10 border-red-500/30' : 'bg-slate-800 border-slate-700'}`}>
                                     <div className="flex justify-between items-center mb-2">
@@ -371,14 +454,27 @@
                         </div>
 
                         {totalDebt > 0 && (
-                            <button 
-                                onClick={sendToStudio}
-                                className="w-full bg-emerald-500 hover:bg-emerald-600 text-white py-4 rounded-2xl font-black text-lg flex items-center justify-center gap-2 shadow-xl transition mb-3"
-                            >
-                                <Send size={22}/> إرسال الكشف على واتساب الاستوديو
+                            <button onClick={() => window.open(`https://wa.me/201285957035?text=${encodeURIComponent(buildWhatsAppMsg())}`, '_blank')}
+                                className="w-full bg-emerald-500 hover:bg-emerald-600 text-white py-4 rounded-2xl font-black text-lg flex items-center justify-center gap-2 shadow-xl transition mb-3">
+                                إرسال الكشف على واتساب الاستوديو
                             </button>
                         )}
-                        <p className="text-center text-slate-500 text-xs font-bold">استوديو بولا عماد — كشف حسابك الخاص</p>
+                            </>
+                        )}
+
+                        {showChangePin && (
+                            <div className="fixed inset-0 bg-black/90 flex items-center justify-center p-4 z-50">
+                                <div className="bg-slate-800 p-8 rounded-[2.5rem] w-full max-w-sm border border-slate-600 text-center">
+                                    <h3 className="text-xl font-black text-white mb-4">تغيير الرقم السري</h3>
+                                    <input type="password" className="w-full p-4 bg-slate-900 rounded-xl mb-3 text-center text-xl font-black text-white border border-slate-600 outline-none" placeholder="الرقم الجديد" value={newPin} onChange={e=>setNewPin(e.target.value)} />
+                                    <input type="password" className="w-full p-4 bg-slate-900 rounded-xl mb-6 text-center text-xl font-black text-white border border-slate-600 outline-none" placeholder="تأكيد الرقم" value={confirmPin} onChange={e=>setConfirmPin(e.target.value)} />
+                                    <div className="flex gap-2">
+                                        <button onClick={handleChangePin} className="flex-1 bg-emerald-600 text-white py-3 rounded-xl font-black">حفظ</button>
+                                        <button onClick={()=>setShowChangePin(false)} className="flex-1 bg-slate-700 text-white py-3 rounded-xl font-black">إلغاء</button>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
                     </div>
                 </div>
             );
