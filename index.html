@@ -205,7 +205,6 @@
             const [customerDoc, setCustomerDoc] = useState(null);
             const [loading, setLoading] = useState(true);
             const [pinInput, setPinInput] = useState('');
-          const [retailFooterDraft, setRetailFooterDraft] = useState(null);
             const [isUnlocked, setIsUnlocked] = useState(false);
             const [needSetPin, setNeedSetPin] = useState(false);
             const [newPin, setNewPin] = useState('');
@@ -498,7 +497,6 @@
               commissionRate: 1 
           });
           const [pinInput, setPinInput] = useState('');
-          const [retailFooterDraft, setRetailFooterDraft] = useState(null);
           
           const [items, setItems] = useState([]);
           const [orders, setOrders] = useState([]);
@@ -606,7 +604,7 @@
           }
 
           if (currentView === 'laser') return <LaserSystem backToHome={() => setCurrentView('landing')} orders={orders} laserBills={laserBills} db={db} appId={appId} />;
-          if (currentView === 'office') return <OfficeSystem backToHome={() => setCurrentView('landing')} orders={orders} items={items} expenses={expenses} customers={customers} employees={employees} debtPayments={debtPayments} deletedLogs={deletedLogs} ratings={ratings} db={db} appId={appId} appSettings={appSettings} />;
+          if (currentView === 'office') return <OfficeSystem backToHome={() => setCurrentView('landing')} orders={orders} items={items} expenses={expenses} customers={customers} employees={employees} debtPayments={debtPayments} deletedLogs={deletedLogs} ratings={ratings} db={db} appId={appId} appSettings={appSettings} setAppSettings={setAppSettings} />;
           
           return null;
         };
@@ -758,8 +756,9 @@
         // =====================================================================
         // === OFFICE SYSTEM
         // =====================================================================
-        const OfficeSystem = ({ backToHome, orders, items, expenses, customers, employees, debtPayments, deletedLogs, ratings, db, appId, appSettings }) => {
+        const OfficeSystem = ({ backToHome, orders, items, expenses, customers, employees, debtPayments, deletedLogs, ratings, db, appId, appSettings, setAppSettings }) => {
             const [tab, setTab] = useState('sales');
+            const [retailFooterDraft, setRetailFooterDraft] = useState(null);
             const [cart, setCart] = useState([]);
             const [amountPaid, setAmountPaid] = useState('');
             const [discount, setDiscount] = useState(''); 
