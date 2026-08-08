@@ -787,7 +787,8 @@
             const [showAddItem, setShowAddItem] = useState(false);
             const [editingStockItem, setEditingStockItem] = useState(null);
             const [newStockValue, setNewStockValue] = useState('');
-            const [editItemData, setEditItemData] = useState({name: '', price: '', wholesalePrice: ''});
+            const [editItemData, setEditItemData] = useState({name: '', price: '', wholesalePrice: '', category: '', linkedItemId: ''});
+            const [newCategoryName, setNewCategoryName] = useState('');
             const [showTopCustomers, setShowTopCustomers] = useState(false);
             const [showEditPromoMsg, setShowEditPromoMsg] = useState(false);
             const [promoMessage, setPromoMessage] = useState('انت من العملاء المميزين لدينا فى مكتب بولا عماد مبروك لقد ربحت قسيمه شراء ب 50 جنيه صالحه لمده شهر من تاريخ ارسال الرساله');
@@ -1029,6 +1030,28 @@
                 const totalTemp = Math.max(0, subTotalTemp - discountValTemp + deliveryValTemp);
                 const isSmallOrder = totalTemp < 5;
 
+                // منع عمل فاتورة جديدة لو العميل عليه ديون متأخرة (+3 أيام)
+                if (customerName.trim() || customerPhone.trim()) {
+                    const todayDate = new Date(today);
+                    const overdueForCustomer = orders.filter(o => {
+                        if (o.remaining <= 0 || !o.dateString) return false;
+                        const nameMatch = customerName.trim() && o.customerName === customerName.trim();
+                        const phoneMatch = customerPhone.trim() && o.customerPhone && (
+                            o.customerPhone === customerPhone.trim() ||
+                            o.customerPhone.includes(customerPhone.trim().replace(/^0/, '')) ||
+                            customerPhone.trim().includes((o.customerPhone||'').replace(/^0/, ''))
+                        );
+                        if (!nameMatch && !phoneMatch) return false;
+                        const oDate = new Date(o.dateString);
+                        const diffDays = (todayDate.getTime() - oDate.getTime()) / (1000 * 3600 * 24);
+                        return diffDays >= 3;
+                    });
+                    if (overdueForCustomer.length > 0) {
+                        const debtAmt = overdueForCustomer.reduce((s,o) => s + (o.remaining||0), 0);
+                        return alert(`هذا العميل عليه مديونية بـ ${debtAmt} ج لا يمكن عمل فاتورة جديدة به`);
+                    }
+                }
+
                 if(!selectedEmployee) return alert("يرجى اختيار الموظف!");
                 if(!isSmallOrder && (!customerName.trim() || !customerPhone.trim())) return alert("يرجى إدخال جميع البيانات (الاسم، الهاتف، الموظف)!");
                 if(!isSmallOrder && !isWhatsAppSent) return alert("يجب إرسال الفاتورة للعميل عبر واتساب أولاً لحفظها!");
@@ -1056,11 +1079,17 @@
                             batch.update(itemRef, { stock: increment(i.qty) });
                         }
                     }
-                    // خصم المخزون الجديد
+                    // خصم المخزون الجديد + الأصناف المربوطة
                     for(let i of cart) {
-                        if(!i.isPrinting && i.id) {
+                        if(!i.isPrintingMaterial && !i.isPrinting && i.id) {
                             const itemRef = doc(db, 'artifacts', appId, 'public', 'data', 'inventory', i.id);
                             batch.update(itemRef, { stock: increment(-i.qty) });
+                        }
+                        // سحب تلقائي من الصنف المربوط
+                        const invItem = items.find(x => x.id === i.id);
+                        if (invItem && invItem.linkedItemId) {
+                            const linkedRef = doc(db, 'artifacts', appId, 'public', 'data', 'inventory', invItem.linkedItemId);
+                            batch.update(linkedRef, { stock: increment(-i.qty) });
                         }
                     }
 
@@ -1081,9 +1110,14 @@
                     });
                     
                     for(let i of cart) {
-                        if(!i.isPrinting && i.id) {
+                        if(!i.isPrintingMaterial && !i.isPrinting && i.id) {
                             const itemRef = doc(db, 'artifacts', appId, 'public', 'data', 'inventory', i.id);
                             batch.update(itemRef, { stock: increment(-i.qty) });
+                        }
+                        const invItem = items.find(x => x.id === i.id);
+                        if (invItem && invItem.linkedItemId) {
+                            const linkedRef = doc(db, 'artifacts', appId, 'public', 'data', 'inventory', invItem.linkedItemId);
+                            batch.update(linkedRef, { stock: increment(-i.qty) });
                         }
                     }
                     
@@ -1754,6 +1788,7 @@
                                             {id: 'laser', n: 'ليزر', i: <Zap size={14}/>},
                                             {id: 'printing', n: 'خامات طباعة', i: <Camera size={14}/>},
                                             {id: 'other', n: 'أخرى', i: <Package size={14}/>},
+                                            ...((appSettings.itemCategories || []).map(c => ({id: 'cat:'+c, n: c, i: <Package size={14}/>})))
                                         ].map(cat => (
                                             <button 
                                                 key={cat.id} 
@@ -1801,6 +1836,7 @@
                                         if (activeCategory === 'laser') matchCat = i.isLaser;
                                         else if (activeCategory === 'printing') matchCat = i.isPrintingMaterial;
                                         else if (activeCategory === 'other') matchCat = !i.isLaser && !i.isPrintingMaterial;
+                                        else if (activeCategory && activeCategory.startsWith('cat:')) matchCat = i.category === activeCategory.slice(4);
                                         return matchSearch && matchCat;
                                     }).sort((a,b) => (a.name||'').localeCompare(b.name||'', 'ar')).map(item => {
                                         const price = isWholesale ? (item.wholesalePrice || item.price) : item.price;
@@ -2048,6 +2084,38 @@
                     {/* --- TAB: WAREHOUSE --- */}
                     {tab === 'warehouse' && (
                          <div className="space-y-6 animate-in fade-in duration-500">
+                            <div className="bg-white p-4 md:p-5 rounded-2xl shadow-sm border border-slate-100">
+                                <div className="font-black text-sm text-slate-700 mb-2">إنشاء قائمة أصناف</div>
+                                <div className="flex gap-2">
+                                    <input className="flex-1 p-3 bg-slate-50 rounded-xl font-black outline-none border border-slate-200" placeholder="مثال: براويز، مجات..." value={newCategoryName} onChange={e=>setNewCategoryName(e.target.value)} />
+                                    <button onClick={async () => {
+                                        const name = newCategoryName.trim();
+                                        if (!name) return alert('اكتب اسم القائمة');
+                                        const cats = [...(appSettings.itemCategories || [])];
+                                        if (cats.includes(name)) return alert('القائمة موجودة');
+                                        cats.push(name);
+                                        await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'app_settings', 'general'), { itemCategories: cats }, { merge: true });
+                                        if (setAppSettings) setAppSettings(prev => ({...prev, itemCategories: cats}));
+                                        setNewCategoryName('');
+                                        alert('تم إنشاء القائمة ✅');
+                                    }} className="bg-indigo-600 text-white px-5 rounded-xl font-black">إضافة قائمة</button>
+                                </div>
+                                {(appSettings.itemCategories || []).length > 0 && (
+                                    <div className="flex flex-wrap gap-2 mt-3">
+                                        {(appSettings.itemCategories || []).map(cat => (
+                                            <span key={cat} className="bg-indigo-50 text-indigo-700 text-xs font-black px-3 py-1.5 rounded-xl flex items-center gap-2">
+                                                {cat}
+                                                <button onClick={async () => {
+                                                    if (!window.confirm('حذف قائمة '+cat+'؟')) return;
+                                                    const cats = (appSettings.itemCategories || []).filter(c => c !== cat);
+                                                    await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'app_settings', 'general'), { itemCategories: cats }, { merge: true });
+                                                    if (setAppSettings) setAppSettings(prev => ({...prev, itemCategories: cats}));
+                                                }} className="text-red-400 hover:text-red-600">×</button>
+                                            </span>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
                             <div className="flex flex-col md:flex-row gap-4 items-center bg-white p-4 md:p-6 rounded-2xl shadow-sm border border-slate-100">
                                  <div className="relative flex-1 w-full">
                                     <Search className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400" size={20}/>
@@ -2128,7 +2196,9 @@
                                             setEditItemData({
                                                 name: item.name || '',
                                                 price: item.price || '',
-                                                wholesalePrice: item.wholesalePrice || item.price || ''
+                                                wholesalePrice: item.wholesalePrice || item.price || '',
+                                                category: item.category || '',
+                                                linkedItemId: item.linkedItemId || ''
                                             });
                                         }} className="mt-4 bg-slate-900 text-white px-6 py-2 rounded-xl text-xs font-black shadow-lg hover:scale-105 transition w-full">تعديل الصنف</button>
                                     </div>
@@ -2979,6 +3049,18 @@
                                     </div>
                                 </div>
 
+                                <label className="text-xs font-black text-slate-500 block mb-1 text-right">القائمة / التصنيف</label>
+                                <select className="w-full p-3 bg-slate-100 rounded-xl mb-4 text-center font-black border-2 border-transparent focus:border-indigo-400 outline-none" value={editItemData.category||''} onChange={e => setEditItemData({...editItemData, category: e.target.value})}>
+                                    <option value="">— بدون قائمة —</option>
+                                    {(appSettings.itemCategories || []).map(cat => <option key={cat} value={cat}>{cat}</option>)}
+                                </select>
+
+                                <label className="text-xs font-black text-slate-500 block mb-1 text-right">ربط بصنف آخر (سحب تلقائي من المخزون)</label>
+                                <select className="w-full p-3 bg-slate-100 rounded-xl mb-4 text-center font-black border-2 border-transparent focus:border-orange-400 outline-none" value={editItemData.linkedItemId||''} onChange={e => setEditItemData({...editItemData, linkedItemId: e.target.value})}>
+                                    <option value="">— بدون ربط —</option>
+                                    {items.filter(i => i.id !== editingStockItem.id).map(i => <option key={i.id} value={i.id}>{i.name}</option>)}
+                                </select>
+
                                 {(!editingStockItem.isPrintingMaterial && !editingStockItem.isPrinting) && (
                                     <>
                                         <label className="text-xs font-black text-slate-500 block mb-1">المخزون</label>
@@ -2992,7 +3074,9 @@
                                             const updates = {
                                                 name: editItemData.name.trim(),
                                                 price: parseFloat(editItemData.price),
-                                                wholesalePrice: parseFloat(editItemData.wholesalePrice) || parseFloat(editItemData.price)
+                                                wholesalePrice: parseFloat(editItemData.wholesalePrice) || parseFloat(editItemData.price),
+                                                category: editItemData.category || '',
+                                                linkedItemId: editItemData.linkedItemId || ''
                                             };
                                             if (!editingStockItem.isPrintingMaterial && !editingStockItem.isPrinting) {
                                                 const val = parseInt(newStockValue);
