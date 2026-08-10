@@ -2135,7 +2135,11 @@
                                         <AlertTriangle size={18}/>
                                         {showLowStock ? 'عرض الكل' : 'النواقص'}
                                     </button>
-                                    <button onClick={()=>setShowAddItem(true)} className="flex-1 md:flex-none bg-emerald-600 hover:bg-emerald-700 text-white px-6 py-3 rounded-xl font-black text-sm flex items-center justify-center gap-2 transition shadow-md">
+                                    <button onClick={()=>{
+                                        const pin = prompt('أدخل الرقم السري لإضافة صنف:');
+                                        if (pin === (appSettings.vaultPin || '3316')) setShowAddItem(true);
+                                        else if (pin !== null) alert('الرقم السري غير صحيح');
+                                    }} className="flex-1 md:flex-none bg-emerald-600 hover:bg-emerald-700 text-white px-6 py-3 rounded-xl font-black text-sm flex items-center justify-center gap-2 transition shadow-md">
                                         <Plus size={18}/> صنف جديد
                                     </button>
                                 </div>
@@ -2191,6 +2195,11 @@
                                         </button>
 
                                         <button onClick={() => { 
+                                            const pin = prompt('أدخل الرقم السري لتعديل الصنف:');
+                                            if (pin !== (appSettings.vaultPin || '3316')) {
+                                                if (pin !== null) alert('الرقم السري غير صحيح');
+                                                return;
+                                            }
                                             setEditingStockItem(item); 
                                             setNewStockValue(item.stock); 
                                             setEditItemData({
