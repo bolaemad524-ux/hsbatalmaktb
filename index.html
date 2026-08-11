@@ -787,7 +787,7 @@
             const [showAddItem, setShowAddItem] = useState(false);
             const [editingStockItem, setEditingStockItem] = useState(null);
             const [newStockValue, setNewStockValue] = useState('');
-            const [editItemData, setEditItemData] = useState({name: '', price: '', wholesalePrice: '', category: '', linkedItemId: ''});
+            const [editItemData, setEditItemData] = useState({name: '', price: '', wholesalePrice: '', category: '', linkedItemId: '', soldByMeter: false, meterUnitPrice: ''});
             const [newCategoryName, setNewCategoryName] = useState('');
             const [showTopCustomers, setShowTopCustomers] = useState(false);
             const [showEditPromoMsg, setShowEditPromoMsg] = useState(false);
@@ -946,13 +946,18 @@
             };
 
             const handleItemClick = (item) => {
-                if (item.name === 'متر طباعه خامه') {
+                if (item.name === 'متر طباعه خامه' || item.isPrintingMaterial) {
                     setPrintModalItem(item);
                     setPrintDims({l: '', w: ''});
                     setPrintCount('1'); 
+                } else if (item.soldByMeter) {
+                    setItemToAddToOrder(item);
+                    setQtyInput('1');
+                    setPrintDims({l: '', w: ''});
                 } else {
                     setItemToAddToOrder(item);
                     setQtyInput('1');
+                    setPrintDims({l: '', w: ''});
                 }
             };
 
@@ -979,10 +984,31 @@
 
             const handleAddItemToCart = () => {
                 if (!itemToAddToOrder) return;
+                if (itemToAddToOrder.soldByMeter) {
+                    const l = parseFloat(printDims.l);
+                    const w = parseFloat(printDims.w);
+                    const count = parseInt(qtyInput) || 1;
+                    if (!l || !w) return alert('أدخل الطول والعرض بالمتر');
+                    const area = l * w * count;
+                    const unitPrice = itemToAddToOrder.meterUnitPrice || itemToAddToOrder.price || 0;
+                    const lineName = `${itemToAddToOrder.name} (${l}م × ${w}م)${count>1?' ×'+count:''}`;
+                    setCart([...cart, {
+                        ...itemToAddToOrder,
+                        name: lineName,
+                        qty: parseFloat(area.toFixed(3)),
+                        currentPrice: unitPrice,
+                        soldByMeter: true,
+                        meterDims: {l, w, count}
+                    }]);
+                    setItemToAddToOrder(null);
+                    setPrintDims({l:'',w:''});
+                    setQtyInput('1');
+                    return;
+                }
                 const qty = parseInt(qtyInput);
                 if (qty > 0) {
                     const price = isWholesale ? (itemToAddToOrder.wholesalePrice || itemToAddToOrder.price) : itemToAddToOrder.price;
-                    const existingItemIndex = cart.findIndex(c => c.id === itemToAddToOrder.id);
+                    const existingItemIndex = cart.findIndex(c => c.id === itemToAddToOrder.id && !c.soldByMeter);
                     if (existingItemIndex > -1) {
                         const newCart = [...cart];
                         newCart[existingItemIndex].qty += qty;
@@ -1782,13 +1808,13 @@
                                         <button onClick={()=>{setIsWholesale(false); setSelectedWholesaleId('');}} className={`flex-1 py-3 rounded-xl font-black transition ${!isWholesale?'bg-emerald-600 text-white shadow-md':'text-slate-400 hover:bg-slate-50'}`}>قطاعي</button>
                                         <button onClick={()=>setIsWholesale(true)} className={`flex-1 py-3 rounded-xl font-black transition ${isWholesale?'bg-amber-600 text-white shadow-md':'text-slate-400 hover:bg-slate-50'}`}>جملة</button>
                                     </div>
-                                    <div className="flex gap-1 overflow-x-auto scrollbar-hide bg-white p-2 rounded-2xl border border-slate-100 shadow-sm flex-1">
+                                    <div className="flex gap-1 overflow-x-auto bg-white p-2 rounded-2xl border border-slate-100 shadow-sm flex-1" style={{scrollbarWidth:'thin', scrollbarColor:'#94a3b8 #f1f5f9'}}>
                                         {[
                                             {id: 'all', n: 'الكل', i: <Layers size={14}/>},
                                             {id: 'laser', n: 'ليزر', i: <Zap size={14}/>},
                                             {id: 'printing', n: 'خامات طباعة', i: <Camera size={14}/>},
                                             {id: 'other', n: 'أخرى', i: <Package size={14}/>},
-                                            ...((appSettings.itemCategories || []).map(c => ({id: 'cat:'+c, n: c, i: <Package size={14}/>})))
+                                            ...Array.from(new Set([...(appSettings.itemCategories || []), ...items.map(i => i.category).filter(Boolean)])).map(c => ({id: 'cat:'+c, n: c, i: <Package size={14}/>}))
                                         ].map(cat => (
                                             <button 
                                                 key={cat.id} 
@@ -2207,7 +2233,9 @@
                                                 price: item.price || '',
                                                 wholesalePrice: item.wholesalePrice || item.price || '',
                                                 category: item.category || '',
-                                                linkedItemId: item.linkedItemId || ''
+                                                linkedItemId: item.linkedItemId || '',
+                                                soldByMeter: !!item.soldByMeter,
+                                                meterUnitPrice: item.meterUnitPrice || ''
                                             });
                                         }} className="mt-4 bg-slate-900 text-white px-6 py-2 rounded-xl text-xs font-black shadow-lg hover:scale-105 transition w-full">تعديل الصنف</button>
                                     </div>
@@ -2998,6 +3026,27 @@
                                     <span className="font-black text-sm text-slate-600">✓ خدمة لا تطلب مخزون</span>
                                 </div>
 
+                                <div 
+                                    id="ni-bymeter"
+                                    className="w-full p-3 rounded-2xl border-2 border-slate-100 cursor-pointer flex items-center justify-center gap-2 mb-2 transition hover:border-blue-300"
+                                    onClick={(e)=>{
+                                        const el = e.currentTarget;
+                                        const meterInput = document.getElementById('ni-meter-price-wrap');
+                                        if(el.classList.contains('border-blue-500')) {
+                                            el.classList.remove('border-blue-500', 'bg-blue-50');
+                                            if(meterInput) meterInput.style.display = 'none';
+                                        } else {
+                                            el.classList.add('border-blue-500', 'bg-blue-50');
+                                            if(meterInput) meterInput.style.display = 'block';
+                                        }
+                                    }}
+                                >
+                                    <span className="font-black text-sm text-slate-600">✓ هل هذا المنتج يباع بالمتر؟</span>
+                                </div>
+                                <div id="ni-meter-price-wrap" style="display:none" className="mb-4">
+                                    <input id="ni-meter-price" type="number" className="w-full p-3 bg-blue-50 rounded-xl font-black text-center border-2 border-blue-200 outline-none" placeholder="سعر المتر (جنيه)"/>
+                                </div>
+
                                 <div className="flex gap-4 mb-6">
                                      <div className={`flex-1 p-4 rounded-2xl border-2 cursor-pointer flex flex-col items-center gap-2 transition ${document.getElementById('ni-islaser')?.classList.contains('border-indigo-500') ? 'border-indigo-500 bg-indigo-50' : 'border-slate-100'}`} 
                                           id="ni-islaser"
@@ -3027,10 +3076,13 @@
                                     const isL = document.getElementById('ni-islaser').classList.contains('border-indigo-500');
                                     const isP = document.getElementById('ni-isprinting').classList.contains('border-blue-500');
                                     const isNoStock = document.getElementById('ni-nostock').classList.contains('border-emerald-500');
+                                    const isByMeter = document.getElementById('ni-bymeter').classList.contains('border-blue-500');
+                                    const meterPriceVal = parseFloat(document.getElementById('ni-meter-price')?.value) || 0;
                                     
                                     if(n&&p) {
                                         await addDoc(collection(db,'artifacts',appId,'public', 'data', 'inventory'), {
-                                            name:n, price:parseFloat(p), wholesalePrice: parseFloat(w) || parseFloat(p), stock: isNoStock || isP ? 0 : (parseInt(s)||0), isLaser:isL, isPrintingMaterial: isP || isNoStock
+                                            name:n, price:parseFloat(p), wholesalePrice: parseFloat(w) || parseFloat(p), stock: isNoStock || isP ? 0 : (parseInt(s)||0), isLaser:isL, isPrintingMaterial: isP || isNoStock,
+                                            soldByMeter: isByMeter, meterUnitPrice: isByMeter ? (meterPriceVal || parseFloat(p)) : 0
                                         });
                                         setShowAddItem(false); alert("تم إضافة الصنف بنجاح ✅");
                                     } else { alert("يرجى إدخال الاسم والسعر على الأقل"); }
@@ -3070,6 +3122,14 @@
                                     {items.filter(i => i.id !== editingStockItem.id).map(i => <option key={i.id} value={i.id}>{i.name}</option>)}
                                 </select>
 
+                                <label className="flex items-center justify-center gap-2 mb-2 cursor-pointer">
+                                    <input type="checkbox" checked={!!editItemData.soldByMeter} onChange={e => setEditItemData({...editItemData, soldByMeter: e.target.checked})} className="w-5 h-5" />
+                                    <span className="font-black text-sm text-slate-600">يُباع بالمتر</span>
+                                </label>
+                                {editItemData.soldByMeter && (
+                                    <input type="number" className="w-full p-3 bg-blue-50 rounded-xl mb-4 text-center font-black border-2 border-blue-200 outline-none" placeholder="سعر المتر" value={editItemData.meterUnitPrice||''} onChange={e => setEditItemData({...editItemData, meterUnitPrice: e.target.value})} />
+                                )}
+
                                 {(!editingStockItem.isPrintingMaterial && !editingStockItem.isPrinting) && (
                                     <>
                                         <label className="text-xs font-black text-slate-500 block mb-1">المخزون</label>
@@ -3085,7 +3145,9 @@
                                                 price: parseFloat(editItemData.price),
                                                 wholesalePrice: parseFloat(editItemData.wholesalePrice) || parseFloat(editItemData.price),
                                                 category: editItemData.category || '',
-                                                linkedItemId: editItemData.linkedItemId || ''
+                                                linkedItemId: editItemData.linkedItemId || '',
+                                                soldByMeter: !!editItemData.soldByMeter,
+                                                meterUnitPrice: editItemData.soldByMeter ? (parseFloat(editItemData.meterUnitPrice) || parseFloat(editItemData.price) || 0) : 0
                                             };
                                             if (!editingStockItem.isPrintingMaterial && !editingStockItem.isPrinting) {
                                                 const val = parseInt(newStockValue);
@@ -3166,8 +3228,32 @@
                         <div className="fixed inset-0 bg-black/80 flex items-center justify-center p-4 z-50">
                             <div className="bg-white rounded-[2.5rem] p-8 w-full max-w-sm shadow-2xl relative text-center">
                                 <h3 className="font-black text-xl mb-4 text-slate-800">إضافة: {itemToAddToOrder.name}</h3>
-                                <p className="text-slate-500 font-bold mb-2">أدخل العدد المطلوب</p>
-                                <input type="number" className="w-full p-4 bg-slate-100 rounded-2xl mb-6 text-center font-black text-2xl border-2 border-transparent focus:border-emerald-500 outline-none" value={qtyInput} onChange={e => setQtyInput(e.target.value)} autoFocus onKeyDown={(e) => { if (e.key === 'Enter') handleAddItemToCart(); }}/>
+                                {itemToAddToOrder.soldByMeter ? (
+                                    <>
+                                        <p className="text-blue-600 font-black mb-2 text-sm">يُباع بالمتر — سعر المتر: {itemToAddToOrder.meterUnitPrice || itemToAddToOrder.price} ج</p>
+                                        <div className="grid grid-cols-2 gap-3 mb-3">
+                                            <div>
+                                                <label className="text-xs font-black text-slate-500">الطول (م)</label>
+                                                <input type="number" step="0.01" className="w-full p-3 bg-slate-100 rounded-xl text-center font-black text-xl outline-none focus:ring-2 focus:ring-blue-400" value={printDims.l} onChange={e=>setPrintDims({...printDims, l:e.target.value})} autoFocus />
+                                            </div>
+                                            <div>
+                                                <label className="text-xs font-black text-slate-500">العرض (م)</label>
+                                                <input type="number" step="0.01" className="w-full p-3 bg-slate-100 rounded-xl text-center font-black text-xl outline-none focus:ring-2 focus:ring-blue-400" value={printDims.w} onChange={e=>setPrintDims({...printDims, w:e.target.value})} />
+                                            </div>
+                                        </div>
+                                        <label className="text-xs font-black text-slate-500">عدد القطع</label>
+                                        <input type="number" className="w-full p-3 bg-slate-100 rounded-xl mb-2 text-center font-black text-xl outline-none" value={qtyInput} onChange={e => setQtyInput(e.target.value)} />
+                                        <p className="text-emerald-600 font-black mb-4">
+                                            المساحة: {((parseFloat(printDims.l)||0)*(parseFloat(printDims.w)||0)*(parseInt(qtyInput)||1)).toFixed(3)} م²
+                                            {' '}= {(((parseFloat(printDims.l)||0)*(parseFloat(printDims.w)||0)*(parseInt(qtyInput)||1))*(itemToAddToOrder.meterUnitPrice||itemToAddToOrder.price||0)).toFixed(0)} ج
+                                        </p>
+                                    </>
+                                ) : (
+                                    <>
+                                        <p className="text-slate-500 font-bold mb-2">أدخل العدد المطلوب</p>
+                                        <input type="number" className="w-full p-4 bg-slate-100 rounded-2xl mb-6 text-center font-black text-2xl border-2 border-transparent focus:border-emerald-500 outline-none" value={qtyInput} onChange={e => setQtyInput(e.target.value)} autoFocus onKeyDown={(e) => { if (e.key === 'Enter') handleAddItemToCart(); }}/>
+                                    </>
+                                )}
                                 <div className="flex gap-2">
                                     <button onClick={handleAddItemToCart} className="flex-1 bg-emerald-600 text-white py-3 rounded-xl font-black shadow-lg hover:bg-emerald-700 transition">إضافة للسلة</button>
                                     <button onClick={() => setItemToAddToOrder(null)} className="flex-1 bg-slate-200 text-slate-500 py-3 rounded-xl font-black hover:bg-slate-300 transition">إلغاء</button>
