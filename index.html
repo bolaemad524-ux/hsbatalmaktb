@@ -962,6 +962,16 @@
             };
 
             const handleItemClick = (item) => {
+                // تحذير مخزون (تحذيري فقط — يمكن المتابعة)
+                const skipStock = item.isPrintingMaterial || item.isPrinting || item.name === 'متر طباعه خامه';
+                if (!skipStock) {
+                    const stock = typeof item.stock === 'number' ? item.stock : parseInt(item.stock) || 0;
+                    if (stock <= 0) {
+                        alert('⚠️ هذا المنتج غير موجود في المخزن');
+                    } else if (stock < 5) {
+                        alert('⚠️ إن هذا المنتج على وشك النفاذ (المتبقي: ' + stock + ')');
+                    }
+                }
                 // فقط منتج الطباعة بالمتر بالاسم المعروف، أو soldByMeter === true صراحة
                 if (item.name === 'متر طباعه خامه') {
                     setPrintModalItem(item);
