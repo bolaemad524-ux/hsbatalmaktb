@@ -876,6 +876,21 @@
             };
             const overdueOrdersList = getOverdueOrders();
 
+            const salesItemsFiltered = useMemo(() => {
+                const q = (itemsSearch || '').trim();
+                return items.filter(i => {
+                    const matchSearch = !q || (i.name || '').includes(q);
+                    let matchCat = true;
+                    if (activeCategory === 'laser') matchCat = !!i.isLaser;
+                    else if (activeCategory === 'printing') matchCat = !!i.isPrintingMaterial;
+                    else if (activeCategory === 'other') matchCat = !i.isLaser && !i.isPrintingMaterial;
+                    else if (activeCategory && activeCategory.startsWith('cat:')) matchCat = i.category === activeCategory.slice(4);
+                    return matchSearch && matchCat;
+                }).sort((a,b) => (a.name||'').localeCompare(b.name||'', 'ar'));
+            }, [items, itemsSearch, activeCategory]);
+
+
+
             const getCustomerFooter = (cName, cPhone) => {
                 const isWholesaleCust = customers.some(c => c.name === cName || c.phone === cPhone);
                 const currentUrl = window.location.href.split('?')[0];
@@ -946,18 +961,18 @@
             };
 
             const handleItemClick = (item) => {
-                if (item.name === 'متر طباعه خامه' || item.isPrintingMaterial) {
+                // فقط منتج الطباعة بالمتر بالاسم المعروف، أو soldByMeter === true صراحة
+                if (item.name === 'متر طباعه خامه') {
                     setPrintModalItem(item);
                     setPrintDims({l: '', w: ''});
-                    setPrintCount('1'); 
-                } else if (item.soldByMeter) {
+                    setPrintCount('1');
+                } else if (item.soldByMeter === true) {
                     setItemToAddToOrder(item);
                     setQtyInput('1');
                     setPrintDims({l: '', w: ''});
                 } else {
                     setItemToAddToOrder(item);
                     setQtyInput('1');
-                    setPrintDims({l: '', w: ''});
                 }
             };
 
@@ -984,7 +999,7 @@
 
             const handleAddItemToCart = () => {
                 if (!itemToAddToOrder) return;
-                if (itemToAddToOrder.soldByMeter) {
+                if (itemToAddToOrder.soldByMeter === true) {
                     const l = parseFloat(printDims.l);
                     const w = parseFloat(printDims.w);
                     const count = parseInt(qtyInput) || 1;
@@ -1814,7 +1829,7 @@
                                             {id: 'laser', n: 'ليزر', i: <Zap size={14}/>},
                                             {id: 'printing', n: 'خامات طباعة', i: <Camera size={14}/>},
                                             {id: 'other', n: 'أخرى', i: <Package size={14}/>},
-                                            ...Array.from(new Set([...(appSettings.itemCategories || []), ...items.map(i => i.category).filter(Boolean)])).map(c => ({id: 'cat:'+c, n: c, i: <Package size={14}/>}))
+                                            ...((appSettings.itemCategories || []).map(c => ({id: 'cat:'+c, n: c, i: <Package size={14}/>})))
                                         ].map(cat => (
                                             <button 
                                                 key={cat.id} 
@@ -1856,15 +1871,7 @@
                                 )}
 
                                 <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-                                    {items.filter(i => {
-                                        const matchSearch = i.name.includes(itemsSearch);
-                                        let matchCat = true;
-                                        if (activeCategory === 'laser') matchCat = i.isLaser;
-                                        else if (activeCategory === 'printing') matchCat = i.isPrintingMaterial;
-                                        else if (activeCategory === 'other') matchCat = !i.isLaser && !i.isPrintingMaterial;
-                                        else if (activeCategory && activeCategory.startsWith('cat:')) matchCat = i.category === activeCategory.slice(4);
-                                        return matchSearch && matchCat;
-                                    }).sort((a,b) => (a.name||'').localeCompare(b.name||'', 'ar')).map(item => {
+                                    {salesItemsFiltered.map(item => {
                                         const price = isWholesale ? (item.wholesalePrice || item.price) : item.price;
                                         return (
                                             <button key={item.id} onClick={()=> handleItemClick(item)} className="bg-white p-6 rounded-[2rem] border border-slate-100 shadow-sm hover:shadow-md transition text-center relative group">
@@ -3228,7 +3235,7 @@
                         <div className="fixed inset-0 bg-black/80 flex items-center justify-center p-4 z-50">
                             <div className="bg-white rounded-[2.5rem] p-8 w-full max-w-sm shadow-2xl relative text-center">
                                 <h3 className="font-black text-xl mb-4 text-slate-800">إضافة: {itemToAddToOrder.name}</h3>
-                                {itemToAddToOrder.soldByMeter ? (
+                                {itemToAddToOrder.soldByMeter === true ? (
                                     <>
                                         <p className="text-blue-600 font-black mb-2 text-sm">يُباع بالمتر — سعر المتر: {itemToAddToOrder.meterUnitPrice || itemToAddToOrder.price} ج</p>
                                         <div className="grid grid-cols-2 gap-3 mb-3">
