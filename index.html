@@ -900,7 +900,7 @@
                 const ratingMsg = `\nمتنساش تقيمنا من خلال الرابط ده عشان تساعدنا فى تطوير خدمتنا ✨👇\n${ratingLink}`;
                 
                 if (isWholesaleCust) {
-                    return `\n\nتابع حسباتك واسعارك من مكتب بولا من خلال رابط البرنامج الخاص بيك ✨👇\n${statementLink}`; 
+                    return `\n\nتابع حسباتك واسعارك من مكتب بولا من خلال رابط البرنامج الخاص بيك ✨👇\n${statementLink}\n\n⚠️ *تنبيه هام:*\nبرجاء سداد قيمة الفاتورة خلال 3 أيام لضمان استمرار إصدار الفواتير الجديدة لحسابكم.\nشاكرين حسن تعاونكم وتفهمكم الدائم.`; 
                 }
                 
                 const retailMarketingMsg = appSettings.retailFooterMsg 
@@ -986,6 +986,7 @@
                     setQtyInput('1');
                 }
             };
+
 
             const handleAddPrintItem = () => {
                 const l = parseFloat(printDims.l);
@@ -1074,6 +1075,7 @@
                 setTab('sales');
             };
 
+            
             const handleCheckout = async () => {
                 if(!cart.length) return alert("السلة فارغة");
                 const subTotalTemp = cart.reduce((a,b)=>a+(b.currentPrice*b.qty),0);
