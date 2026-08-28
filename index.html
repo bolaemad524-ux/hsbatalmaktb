@@ -780,6 +780,7 @@
             const [pinEntry, setPinEntry] = useState('');
             const [editingOrder, setEditingOrder] = useState(null);
             const [editAmount, setEditAmount] = useState('');
+            const [editPayMethod, setEditPayMethod] = useState('cash');
             const [deleteReason, setDeleteReason] = useState(''); 
             const [deleteEmployee, setDeleteEmployee] = useState('');
             
@@ -1570,6 +1571,21 @@
                         dateString: today
                     });
 
+                    // إرجاع أصناف الفاتورة للمخزن
+                    const restoreBatch = writeBatch(db);
+                    for (const i of (deleteConfirmModal.items || [])) {
+                        if (!i.isPrinting && !i.isPrintingMaterial && i.id) {
+                            const itemRef = doc(db, 'artifacts', appId, 'public', 'data', 'inventory', i.id);
+                            restoreBatch.update(itemRef, { stock: increment(i.qty || 0) });
+                        }
+                        const invItem = items.find(x => x.id === i.id);
+                        if (invItem && invItem.linkedItemId) {
+                            const linkedRef = doc(db, 'artifacts', appId, 'public', 'data', 'inventory', invItem.linkedItemId);
+                            restoreBatch.update(linkedRef, { stock: increment(i.qty || 0) });
+                        }
+                    }
+                    await restoreBatch.commit();
+
                     const q = query(collection(db, 'artifacts', appId, 'public', 'data', 'debt_payments'), where('orderId', '==', orderId));
                     const snapshot = await getDocs(q);
                     
@@ -1592,11 +1608,41 @@
             const handleUpdateOrder = async () => {
                 if(!editingOrder) return;
                 const paid = parseFloat(editAmount);
-                await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'orders', editingOrder.id), {
-                    paid: paid,
-                    remaining: editingOrder.total - paid
-                });
-                setEditingOrder(null); setEditAmount('');
+                if (isNaN(paid) || paid < 0) return alert("المبلغ غير صحيح");
+                const oldPaid = parseFloat(editingOrder.paid) || 0;
+                const diff = paid - oldPaid;
+                const remaining = editingOrder.total - paid;
+                try {
+                    const batch = writeBatch(db);
+                    batch.update(doc(db, 'artifacts', appId, 'public', 'data', 'orders', editingOrder.id), {
+                        paid: paid,
+                        remaining: remaining
+                    });
+                    if (diff !== 0) {
+                        const paymentRef = doc(collection(db, 'artifacts', appId, 'public', 'data', 'debt_payments'));
+                        batch.set(paymentRef, {
+                            amount: diff,
+                            orderId: editingOrder.id,
+                            customerName: editingOrder.customerName || '',
+                            customerPhone: editingOrder.customerPhone || '',
+                            paymentMethod: editPayMethod,
+                            dateString: today,
+                            createdAt: serverTimestamp(),
+                            note: diff > 0 ? 'تعديل المدفوع من الطلبات' : 'تخفيض المدفوع من الطلبات'
+                        });
+                        // لو الدفع من المحفظة وعميل جملة: خصم/زيادة رصيد المحفظة
+                        if (editPayMethod === 'wallet' && editingOrder.customerId && diff > 0) {
+                            const custRef = doc(db, 'artifacts', appId, 'public', 'data', 'wholesale_customers', editingOrder.customerId);
+                            batch.update(custRef, { walletBalance: increment(-diff) });
+                        }
+                    }
+                    await batch.commit();
+                    setEditingOrder(null); setEditAmount('');
+                    alert(diff > 0 ? ('تم إضافة ' + diff + ' ج إلى ' + (editPayMethod === 'wallet' ? 'المحفظة' : 'الدرج')) : 'تم تحديث المدفوع');
+                } catch(e) {
+                    console.error(e);
+                    alert('حدث خطأ أثناء التحديث');
+                }
             };
             
             const handleAddVaultExpense = async () => {
@@ -2081,7 +2127,7 @@
                                                 <ShoppingCart size={14}/> إضافة أصناف للطلب (البيع)
                                             </button>
 
-                                            <button onClick={()=>{setEditingOrder(order); setEditAmount(order.paid);}} className="bg-blue-50 text-blue-600 py-3 rounded-xl font-black text-xs flex items-center justify-center gap-2 hover:bg-blue-100 transition border border-blue-100">
+                                            <button onClick={()=>{setEditingOrder(order); setEditAmount(order.paid); setEditPayMethod('cash');}} className="bg-blue-50 text-blue-600 py-3 rounded-xl font-black text-xs flex items-center justify-center gap-2 hover:bg-blue-100 transition border border-blue-100">
                                                 <Edit size={14}/> تعديل المدفوع
                                             </button>
                                             <button onClick={() => {
@@ -2221,8 +2267,16 @@
                                                     {item.stock}
                                                 </div>
                                                 <div className="flex flex-col gap-1">
-                                                    <button onClick={()=>updateDoc(doc(db,'artifacts',appId,'public','data','inventory',item.id),{stock: increment(1)})} className="bg-slate-200 text-slate-600 p-1 rounded hover:bg-emerald-500 hover:text-white transition"><Plus size={16}/></button>
-                                                    <button onClick={()=>updateDoc(doc(db,'artifacts',appId,'public','data','inventory',item.id),{stock: increment(-1)})} className="bg-slate-200 text-slate-600 p-1 rounded hover:bg-red-500 hover:text-white transition"><MinusCircle size={16}/></button>
+                                                    <button onClick={()=>{
+                                                        const pin = prompt('أدخل الرقم السري لتعديل المخزون:');
+                                                        if (pin !== (appSettings.vaultPin || '3316')) { if (pin !== null) alert('الرقم السري غير صحيح'); return; }
+                                                        updateDoc(doc(db,'artifacts',appId,'public','data','inventory',item.id),{stock: increment(1)});
+                                                    }} className="bg-slate-200 text-slate-600 p-1 rounded hover:bg-emerald-500 hover:text-white transition"><Plus size={16}/></button>
+                                                    <button onClick={()=>{
+                                                        const pin = prompt('أدخل الرقم السري لتعديل المخزون:');
+                                                        if (pin !== (appSettings.vaultPin || '3316')) { if (pin !== null) alert('الرقم السري غير صحيح'); return; }
+                                                        updateDoc(doc(db,'artifacts',appId,'public','data','inventory',item.id),{stock: increment(-1)});
+                                                    }} className="bg-slate-200 text-slate-600 p-1 rounded hover:bg-red-500 hover:text-white transition"><MinusCircle size={16}/></button>
                                                 </div>
                                             </div>
                                         ) : (
@@ -3499,7 +3553,12 @@
                                     <div className="text-2xl font-black text-slate-800">{editingOrder.total} ج</div>
                                 </div>
                                 <label className="text-xs font-black text-slate-500 mb-2 block mr-2">المبلغ المدفوع الحالي:</label>
-                                <input className="w-full p-4 bg-slate-100 rounded-2xl mb-6 text-center font-black text-xl border-2 border-transparent focus:border-blue-500 outline-none" type="number" value={editAmount} onChange={e=>setEditAmount(e.target.value)}/>
+                                <input className="w-full p-4 bg-slate-100 rounded-2xl mb-4 text-center font-black text-xl border-2 border-transparent focus:border-blue-500 outline-none" type="number" value={editAmount} onChange={e=>setEditAmount(e.target.value)}/>
+                                <p className="text-xs font-black text-slate-500 mb-2 text-center">الفرق يضاف على</p>
+                                <div className="grid grid-cols-2 gap-2 mb-6">
+                                    <button type="button" onClick={()=>setEditPayMethod('cash')} className={`py-3 rounded-xl font-black text-sm border ${editPayMethod==='cash' ? 'bg-emerald-600 text-white border-emerald-600' : 'bg-slate-50 text-slate-600 border-slate-200'}`}>الدرج</button>
+                                    <button type="button" onClick={()=>setEditPayMethod('wallet')} className={`py-3 rounded-xl font-black text-sm border ${editPayMethod==='wallet' ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-slate-50 text-slate-600 border-slate-200'}`}>المحفظة</button>
+                                </div>
                                 <div className="flex gap-2">
                                     <button onClick={handleUpdateOrder} className="flex-1 bg-blue-600 text-white py-4 rounded-xl font-black shadow-lg">تحديث</button>
                                     <button onClick={()=>setEditingOrder(null)} className="flex-1 bg-slate-100 text-slate-500 py-4 rounded-xl font-black">إلغاء</button>
