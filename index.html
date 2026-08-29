@@ -485,6 +485,116 @@
         };
 
         // --- MAIN APP COMPONENT ---
+
+        const StampCardSystem = ({ db, appId }) => {
+            const [loading, setLoading] = useState(true);
+            const [customerName, setCustomerName] = useState('');
+            const [phone, setPhone] = useState('');
+            const [inCycle, setInCycle] = useState(0);
+            const [gifts, setGifts] = useState(0);
+            const [totalOrders, setTotalOrders] = useState(0);
+
+            useEffect(() => {
+                const params = new URLSearchParams(window.location.search);
+                const p = params.get('phone') || params.get('cphone') || '';
+                const n = params.get('cname') || '';
+                setPhone(p);
+                setCustomerName(n);
+                if (!p) { setLoading(false); return; }
+
+                const unsubOrders = onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', 'orders'), (s) => {
+                    const all = s.docs.map(d => ({id:d.id, ...d.data()}));
+                    const norm = (x) => String(x||'').replace(/\s+/g,'').replace(/^0+/, '');
+                    const target = norm(p);
+                    const retail = all.filter(o => {
+                        if (o.isWholesale) return false;
+                        const op = norm(o.customerPhone);
+                        return op && (op === target || op.includes(target) || target.includes(op));
+                    });
+                    const total = retail.length;
+                    setTotalOrders(total);
+                    setInCycle(total % 8);
+                    setGifts(Math.floor(total / 8));
+                    if (!n) {
+                        const last = retail.sort((a,b)=>(b.createdAt?.seconds||0)-(a.createdAt?.seconds||0))[0];
+                        if (last) setCustomerName(last.customerName || '');
+                    }
+                    setLoading(false);
+                });
+                return () => unsubOrders();
+            }, [db, appId]);
+
+            const displayStamps = inCycle === 0 && totalOrders > 0 && totalOrders % 8 === 0 ? 8 : inCycle;
+            const remaining = displayStamps === 8 ? 0 : (8 - displayStamps);
+            const percent = Math.round((displayStamps / 8) * 100);
+
+            if (loading) {
+                return <div className="min-h-screen flex items-center justify-center bg-gradient-to-b from-blue-50 to-white text-blue-500 font-black">جاري التحميل...</div>;
+            }
+
+            return (
+                <div className="min-h-screen bg-gradient-to-b from-[#dbeafe] via-white to-[#eff6ff] p-4 flex items-center justify-center font-sans" dir="rtl">
+                    <div className="w-full max-w-md">
+                        <div className="text-center mb-4">
+                            <div className="text-xs font-black tracking-widest text-blue-500">STUDIO BOLA EMAD</div>
+                            <h1 className="text-2xl font-black text-slate-800 mt-1">بطاقة الأختام</h1>
+                            <p className="text-sm font-bold text-slate-500 mt-1">{customerName || 'عميل مكتب بولا'}</p>
+                        </div>
+
+                        <div className="bg-white rounded-[2.2rem] shadow-xl border border-blue-100 p-6 relative overflow-hidden">
+                            <div className="absolute -top-10 -left-10 w-32 h-32 bg-blue-100 rounded-full opacity-50"></div>
+                            <div className="relative">
+                                <div className="flex justify-between items-start mb-4">
+                                    <div>
+                                        <div className="text-xs font-black text-slate-400">متبقي للمكافأة</div>
+                                        <div className="text-3xl font-black text-blue-600">{remaining} أختام</div>
+                                    </div>
+                                    <div className="text-left">
+                                        <div className="text-xs font-black text-slate-400">رصيد الأختام الحالي</div>
+                                        <div className="text-3xl font-black text-slate-800"><span className="text-slate-800">{displayStamps}</span><span className="text-slate-400 text-xl"> / 8</span></div>
+                                    </div>
+                                </div>
+
+                                <div className="h-2.5 bg-blue-100 rounded-full overflow-hidden mb-2">
+                                    <div className="h-full bg-gradient-to-l from-blue-500 to-blue-400 rounded-full transition-all" style={{width: percent + '%'}}></div>
+                                </div>
+                                <div className="flex justify-between text-xs font-black text-slate-500 mb-6">
+                                    <span>🏆 إجمالي الهدايا: {gifts}</span>
+                                    <span>{percent}% مكتمل</span>
+                                </div>
+
+                                <div className="text-sm font-black text-slate-600 mb-3">بطاقة الأختام</div>
+                                <div className="grid grid-cols-4 gap-3">
+                                    {Array.from({length: 8}).map((_, i) => {
+                                        const filled = i < displayStamps;
+                                        return (
+                                            <div key={i} className={`aspect-square rounded-full flex items-center justify-center shadow-sm ${filled ? 'bg-gradient-to-br from-blue-400 to-blue-600 text-white' : 'bg-slate-100 text-slate-300'}`}>
+                                                <span className="text-xl font-black">{filled ? '✓' : (i+1)}</span>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+
+                                {displayStamps === 8 ? (
+                                    <div className="mt-6 bg-amber-50 border border-amber-200 text-amber-700 font-black text-center p-3 rounded-2xl">
+                                        مبروك 🎉 مكتمل — خصم 35% على أوردر المكافأة
+                                    </div>
+                                ) : (
+                                    <div className="mt-6 bg-blue-50 text-blue-700 font-bold text-center p-3 rounded-2xl text-sm">
+                                        كل أوردر = ختم واحد. عند 8 أختام تحصل على خصم 35%
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+
+                        <p className="text-center text-[11px] font-black text-slate-400 mt-6 leading-relaxed">
+                            هذا البرنامج تابع فقط لاستوديو ومكتب بولا عماد<br/>غير مسموح باستخدامه أو نسخه لأي جهة أخرى
+                        </p>
+                    </div>
+                </div>
+            );
+        };
+
         const App = () => {
           const [user, setUser] = useState(null);
           const [currentView, setCurrentView] = useState('landing');
@@ -521,6 +631,8 @@
                 setCurrentView('rating');
             } else if (viewParam === 'statement') {
                 setCurrentView('statement');
+            } else if (viewParam === 'stamps') {
+                setCurrentView('stamps');
             }
           }, []);
 
@@ -571,6 +683,10 @@
 
           if (currentView === 'statement') {
               return <StatementSystem db={db} appId={appId} />;
+          }
+
+          if (currentView === 'stamps') {
+              return <StampCardSystem db={db} appId={appId} />;
           }
 
           if (currentView === 'landing') {
@@ -898,6 +1014,7 @@
             const [expandedMonth, setExpandedMonth] = useState(null);
 
             const [isWholesale, setIsWholesale] = useState(false);
+            const [stampAlertedPhone, setStampAlertedPhone] = useState('');
             const [selectedWholesaleId, setSelectedWholesaleId] = useState('');
             const [wholesaleSearch, setWholesaleSearch] = useState(''); 
             
@@ -976,10 +1093,22 @@
                     return `\n\nتابع حسباتك واسعارك من مكتب بولا من خلال رابط البرنامج الخاص بيك ✨👇\n${statementLink}\n\n⚠️ *تنبيه هام:*\nبرجاء سداد قيمة الفاتورة خلال 3 أيام لضمان استمرار إصدار الفواتير الجديدة لحسابكم.\nشاكرين حسن تعاونكم وتفهمكم الدائم.`; 
                 }
                 
+                const stampsLink = `${currentUrl}?view=stamps&phone=${encodeURIComponent(cPhone||'')}&cname=${encodeURIComponent(cName||'')}`;
+                const norm = (x) => String(x||'').replace(/\s+/g,'').replace(/^0+/, '');
+                const target = norm(cPhone);
+                const retailCount = orders.filter(o => {
+                    if (o.isWholesale) return false;
+                    if (customers.some(c => c.id === o.customerId || (c.phone && norm(c.phone) === norm(o.customerPhone)))) return false;
+                    const op = norm(o.customerPhone);
+                    return op && target && (op === target || op.includes(target) || target.includes(op));
+                }).length;
+                const stampNum = retailCount + 1;
+                const stampWord = stampNum === 8 ? 'الثامن (خصم 35%)' : (['','الأول','الثاني','الثالث','الرابع','الخامس','السادس','السابع','الثامن'][stampNum] || stampNum);
+                const stampMsg = `\n\n🎉 مبروك تم حصولك على الختم ${stampWord} من مكتب بولا عماد\nتابع أختامك من هنا 👇\n${stampsLink}`;
                 const retailMarketingMsg = appSettings.retailFooterMsg 
                     ? `\n${appSettings.retailFooterMsg}` 
                     : `\nمتنساش تتابع صفحتنا على الفيس بوك ✨👇\nhttps://www.facebook.com/share/18o6vPJTep/\nوخلي المتجر معاك وتابع أقوى الخصومات 🔥😉👇\nhttps://bolaemad524-ux.github.io/matheronline-/?store=store_1773991337877 🔗`;
-                return retailMarketingMsg;
+                return stampMsg + retailMarketingMsg;
             };
 
             const handleExportInventory = () => {
@@ -1149,6 +1278,36 @@
             };
 
             
+            const getRetailStampInfo = (phone) => {
+                const norm = (x) => String(x||'').replace(/\s+/g,'').replace(/^0+/, '');
+                const target = norm(phone);
+                if (!target) return { total: 0, inCycle: 0, gifts: 0, nextIsReward: false, remaining: 8 };
+                const wholesaleIds = new Set(customers.map(c => c.id));
+                const wholesalePhones = new Set(customers.map(c => norm(c.phone)).filter(Boolean));
+                const retail = orders.filter(o => {
+                    if (o.isWholesale) return false;
+                    if (o.customerId && wholesaleIds.has(o.customerId)) return false;
+                    const op = norm(o.customerPhone);
+                    if (op && wholesalePhones.has(op)) return false;
+                    return op && (op === target || op.includes(target) || target.includes(op));
+                });
+                const total = retail.length;
+                const inCycle = total % 8;
+                return { total, inCycle, gifts: Math.floor(total/8), nextIsReward: inCycle === 7, remaining: inCycle === 0 ? 8 : 8 - inCycle };
+            };
+
+
+            useEffect(() => {
+                if (isWholesale || !customerPhone.trim() || customerPhone.trim().length < 8) return;
+                const info = getRetailStampInfo(customerPhone);
+                if (info.nextIsReward && stampAlertedPhone !== customerPhone.trim()) {
+                    setStampAlertedPhone(customerPhone.trim());
+                    alert('🎉 هذا العميل حصل على خصم 35% بسبب حصوله على الأوردر الثامن في بطاقة الأختام');
+                    const sub = cart.reduce((a,b)=>a+(b.currentPrice*b.qty),0);
+                    if (sub > 0) setDiscount((sub * 0.35).toFixed(2));
+                }
+            }, [customerPhone, isWholesale]);
+
             const handleCheckout = async () => {
                 if(!cart.length) return alert("السلة فارغة");
                 const subTotalTemp = cart.reduce((a,b)=>a+(b.currentPrice*b.qty),0);
@@ -1232,7 +1391,7 @@
                     const newOrderRef = doc(collection(db, 'artifacts', appId, 'public', 'data', 'orders'));
                     batch.set(newOrderRef, {
                         items: cart, subTotal, discount: discountVal, deliveryFee: deliveryVal, total, paid, remaining: total-paid, initialPaid: paid, 
-                        customerName, customerPhone, employeeName: selectedEmployee, paymentMethod, customerId: selectedWholesaleId || null,
+                        customerName, customerPhone, employeeName: selectedEmployee, paymentMethod, customerId: selectedWholesaleId || null, isWholesale: !!isWholesale,
                         dateString: today, monthString: today.slice(0, 7), createdAt: serverTimestamp()
                     });
                     
