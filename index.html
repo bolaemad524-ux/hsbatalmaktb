@@ -577,11 +577,11 @@
 
                                 {displayStamps === 8 ? (
                                     <div className="mt-6 bg-amber-50 border border-amber-200 text-amber-700 font-black text-center p-3 rounded-2xl">
-                                        مبروك 🎉 مكتمل — خصم 35% على أوردر المكافأة
+                                        مبروك 🎉 مكتمل — خصم 50 جنيه على أوردر المكافأة
                                     </div>
                                 ) : (
                                     <div className="mt-6 bg-blue-50 text-blue-700 font-bold text-center p-3 rounded-2xl text-sm">
-                                        كل أوردر = ختم واحد. عند 8 أختام تحصل على خصم 35%
+                                        كل أوردر = ختم واحد. عند 8 أختام تحصل على خصم 50 جنيه
                                     </div>
                                 )}
                             </div>
@@ -1103,7 +1103,7 @@
                     return op && target && (op === target || op.includes(target) || target.includes(op));
                 }).length;
                 const stampNum = retailCount + 1;
-                const stampWord = stampNum === 8 ? 'الثامن (خصم 35%)' : (['','الأول','الثاني','الثالث','الرابع','الخامس','السادس','السابع','الثامن'][stampNum] || stampNum);
+                const stampWord = stampNum === 8 ? 'الثامن (خصم 50 جنيه)' : (['','الأول','الثاني','الثالث','الرابع','الخامس','السادس','السابع','الثامن'][stampNum] || stampNum);
                 const stampMsg = `\n\n🎉 مبروك تم حصولك على الختم ${stampWord} من مكتب بولا عماد\nتابع أختامك من هنا 👇\n${stampsLink}`;
                 const retailMarketingMsg = appSettings.retailFooterMsg 
                     ? `\n${appSettings.retailFooterMsg}` 
@@ -1302,9 +1302,9 @@
                 const info = getRetailStampInfo(customerPhone);
                 if (info.nextIsReward && stampAlertedPhone !== customerPhone.trim()) {
                     setStampAlertedPhone(customerPhone.trim());
-                    alert('🎉 هذا العميل حصل على خصم 35% بسبب حصوله على الأوردر الثامن في بطاقة الأختام');
+                    alert('🎉 هذا العميل حصل على خصم 50 جنيه بسبب حصوله على الأوردر الثامن في بطاقة الأختام');
                     const sub = cart.reduce((a,b)=>a+(b.currentPrice*b.qty),0);
-                    if (sub > 0) setDiscount((sub * 0.35).toFixed(2));
+                    setDiscount('50');
                 }
             }, [customerPhone, isWholesale]);
 
