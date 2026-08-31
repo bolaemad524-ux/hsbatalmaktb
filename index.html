@@ -619,6 +619,37 @@
           const [ratings, setRatings] = useState([]); 
 
           useEffect(() => {
+            if (!window.history.state || !window.history.state.appLock) {
+                window.history.replaceState({ appLock: true, view: currentView }, '');
+                window.history.pushState({ appLock: true, view: currentView }, '');
+            }
+            const onPop = () => {
+                const officeTab = window.__officeTab || 'sales';
+                if (currentView === 'office' && officeTab !== 'sales') {
+                    window.dispatchEvent(new Event('reset-office-tab'));
+                    window.history.pushState({ appLock: true, view: 'office' }, '');
+                    return;
+                }
+                if (currentView === 'laser' && window.__laserTab && window.__laserTab !== 'accounts') {
+                    window.dispatchEvent(new Event('reset-laser-tab'));
+                    window.history.pushState({ appLock: true, view: 'laser' }, '');
+                    return;
+                }
+                if (currentView !== 'landing' && currentView !== 'rating' && currentView !== 'statement' && currentView !== 'stamps') {
+                    setCurrentView('landing');
+                    setAuthView(null);
+                    setPinInput('');
+                    window.history.pushState({ appLock: true, view: 'landing' }, '');
+                    return;
+                }
+                // على الشاشة الرئيسية: متخرجش من البرنامج
+                window.history.pushState({ appLock: true, view: 'landing' }, '');
+            };
+            window.addEventListener('popstate', onPop);
+            return () => window.removeEventListener('popstate', onPop);
+          }, [currentView]);
+
+          useEffect(() => {
             const initAuth = async () => {
                 await signInAnonymously(auth).catch(e => console.error("Auth Error:", e));
             };
@@ -731,6 +762,12 @@
         const LaserSystem = ({ backToHome, orders, laserBills, db, appId, items = [] }) => {
             const [period, setPeriod] = useState('all');
             const [laserTab, setLaserTab] = useState('accounts');
+            useEffect(() => { window.__laserTab = laserTab; }, [laserTab]);
+            useEffect(() => {
+                const reset = () => setLaserTab('accounts');
+                window.addEventListener('reset-laser-tab', reset);
+                return () => window.removeEventListener('reset-laser-tab', reset);
+            }, []);
             const [showAddBill, setShowAddBill] = useState(false);
             const [billData, setBillData] = useState({amount: '', desc: ''});
             const [showSettleConfirm, setShowSettleConfirm] = useState(false);
@@ -946,6 +983,12 @@
         // =====================================================================
         const OfficeSystem = ({ backToHome, orders, items, expenses, customers, employees, debtPayments, deletedLogs, ratings, db, appId, appSettings, setAppSettings }) => {
             const [tab, setTab] = useState('sales');
+            useEffect(() => { window.__officeTab = tab; }, [tab]);
+            useEffect(() => {
+                const reset = () => setTab('sales');
+                window.addEventListener('reset-office-tab', reset);
+                return () => window.removeEventListener('reset-office-tab', reset);
+            }, []);
             const [retailFooterDraft, setRetailFooterDraft] = useState(null);
             const [cart, setCart] = useState([]);
             const [amountPaid, setAmountPaid] = useState('');
