@@ -30,6 +30,15 @@
     </script>
 </head>
 <body class="bg-slate-900">
+    <script>
+      setTimeout(function(){
+        var s = document.getElementById('splash');
+        if (s && s.parentNode && s.parentNode.id === 'root') {
+          // لسه التحميل واقف = في خطأ. نخلي المستخدم يشوف رسالة
+          s.innerHTML = '<div style="color:#fff;text-align:center;font-family:sans-serif;padding:24px"><div style="font-weight:900;font-size:20px;margin-bottom:8px">مشكلة في فتح البرنامج</div><div style="color:#94a3b8;font-size:13px">حدّث الصفحة أو نزّل الملف من جديد</div></div>';
+        }
+      }, 12000);
+    </script>
     
     <div id="root">
         <div id="splash" style="height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;background:radial-gradient(ellipse at center,#0a1628 0%,#020617 70%);color:white;font-family:system-ui,sans-serif;overflow:hidden;position:relative;">
@@ -589,13 +598,7 @@
             else { alert("عذراً، الرقم السري غير صحيح"); setPinInput(''); }
           };
 
-          if (!user) return (
-            <div className="min-h-screen flex flex-col items-center justify-center bg-slate-950 text-white" dir="rtl">
-              <div className="w-24 h-24 rounded-full border-4 border-blue-500 border-t-transparent animate-spin mb-6"/>
-              <div className="text-2xl font-black mb-2"><span className="text-slate-200">BOLA</span> <span className="text-blue-500">EMAD</span></div>
-              <div className="text-slate-400 text-sm font-bold">جاري تحميل النظام...</div>
-            </div>
-          );
+          // متستناش تسجيل الدخول عشان الشاشة متتقفلش على التحميل
 
           if (currentView === 'rating') {
               return <RatingSystem db={db} appId={appId} />;
