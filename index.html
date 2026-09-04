@@ -30,15 +30,6 @@
     </script>
 </head>
 <body class="bg-slate-900">
-    <script>
-      setTimeout(function(){
-        var s = document.getElementById('splash');
-        if (s && s.parentNode && s.parentNode.id === 'root') {
-          // لسه التحميل واقف = في خطأ. نخلي المستخدم يشوف رسالة
-          s.innerHTML = '<div style="color:#fff;text-align:center;font-family:sans-serif;padding:24px"><div style="font-weight:900;font-size:20px;margin-bottom:8px">مشكلة في فتح البرنامج</div><div style="color:#94a3b8;font-size:13px">حدّث الصفحة أو نزّل الملف من جديد</div></div>';
-        }
-      }, 12000);
-    </script>
     
     <div id="root">
         <div id="splash" style="height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;background:radial-gradient(ellipse at center,#0a1628 0%,#020617 70%);color:white;font-family:system-ui,sans-serif;overflow:hidden;position:relative;">
@@ -494,7 +485,6 @@
         };
 
         // --- MAIN APP COMPONENT ---
-
         const App = () => {
           const [user, setUser] = useState(null);
           const [currentView, setCurrentView] = useState('landing');
@@ -519,37 +509,6 @@
           const [ratings, setRatings] = useState([]); 
 
           useEffect(() => {
-            if (!window.history.state || !window.history.state.appLock) {
-                window.history.replaceState({ appLock: true, view: currentView }, '');
-                window.history.pushState({ appLock: true, view: currentView }, '');
-            }
-            const onPop = () => {
-                const officeTab = window.__officeTab || 'sales';
-                if (currentView === 'office' && officeTab !== 'sales') {
-                    window.dispatchEvent(new Event('reset-office-tab'));
-                    window.history.pushState({ appLock: true, view: 'office' }, '');
-                    return;
-                }
-                if (currentView === 'laser' && window.__laserTab && window.__laserTab !== 'accounts') {
-                    window.dispatchEvent(new Event('reset-laser-tab'));
-                    window.history.pushState({ appLock: true, view: 'laser' }, '');
-                    return;
-                }
-                if (currentView !== 'landing' && currentView !== 'rating' && currentView !== 'statement' && currentView !== 'stamps') {
-                    setCurrentView('landing');
-                    setAuthView(null);
-                    setPinInput('');
-                    window.history.pushState({ appLock: true, view: 'landing' }, '');
-                    return;
-                }
-                // على الشاشة الرئيسية: متخرجش من البرنامج
-                window.history.pushState({ appLock: true, view: 'landing' }, '');
-            };
-            window.addEventListener('popstate', onPop);
-            return () => window.removeEventListener('popstate', onPop);
-          }, [currentView]);
-
-          useEffect(() => {
             const initAuth = async () => {
                 await signInAnonymously(auth).catch(e => console.error("Auth Error:", e));
             };
@@ -562,7 +521,7 @@
                 setCurrentView('rating');
             } else if (viewParam === 'statement') {
                 setCurrentView('statement');
-
+            }
           }, []);
 
           useEffect(() => {
@@ -598,7 +557,13 @@
             else { alert("عذراً، الرقم السري غير صحيح"); setPinInput(''); }
           };
 
-          // متستناش تسجيل الدخول عشان الشاشة متتقفلش على التحميل
+          if (!user) return (
+            <div className="min-h-screen flex flex-col items-center justify-center bg-slate-950 text-white" dir="rtl">
+              <div className="w-24 h-24 rounded-full border-4 border-blue-500 border-t-transparent animate-spin mb-6"/>
+              <div className="text-2xl font-black mb-2"><span className="text-slate-200">BOLA</span> <span className="text-blue-500">EMAD</span></div>
+              <div className="text-slate-400 text-sm font-bold">جاري تحميل النظام...</div>
+            </div>
+          );
 
           if (currentView === 'rating') {
               return <RatingSystem db={db} appId={appId} />;
@@ -607,7 +572,6 @@
           if (currentView === 'statement') {
               return <StatementSystem db={db} appId={appId} />;
           }
-
 
           if (currentView === 'landing') {
             return (
@@ -651,12 +615,6 @@
         const LaserSystem = ({ backToHome, orders, laserBills, db, appId, items = [] }) => {
             const [period, setPeriod] = useState('all');
             const [laserTab, setLaserTab] = useState('accounts');
-            useEffect(() => { window.__laserTab = laserTab; }, [laserTab]);
-            useEffect(() => {
-                const reset = () => setLaserTab('accounts');
-                window.addEventListener('reset-laser-tab', reset);
-                return () => window.removeEventListener('reset-laser-tab', reset);
-            }, []);
             const [showAddBill, setShowAddBill] = useState(false);
             const [billData, setBillData] = useState({amount: '', desc: ''});
             const [showSettleConfirm, setShowSettleConfirm] = useState(false);
@@ -872,12 +830,6 @@
         // =====================================================================
         const OfficeSystem = ({ backToHome, orders, items, expenses, customers, employees, debtPayments, deletedLogs, ratings, db, appId, appSettings, setAppSettings }) => {
             const [tab, setTab] = useState('sales');
-            useEffect(() => { window.__officeTab = tab; }, [tab]);
-            useEffect(() => {
-                const reset = () => setTab('sales');
-                window.addEventListener('reset-office-tab', reset);
-                return () => window.removeEventListener('reset-office-tab', reset);
-            }, []);
             const [retailFooterDraft, setRetailFooterDraft] = useState(null);
             const [cart, setCart] = useState([]);
             const [amountPaid, setAmountPaid] = useState('');
@@ -1027,7 +979,6 @@
                 const retailMarketingMsg = appSettings.retailFooterMsg 
                     ? `\n${appSettings.retailFooterMsg}` 
                     : `\nمتنساش تتابع صفحتنا على الفيس بوك ✨👇\nhttps://www.facebook.com/share/18o6vPJTep/\nوخلي المتجر معاك وتابع أقوى الخصومات 🔥😉👇\nhttps://bolaemad524-ux.github.io/matheronline-/?store=store_1773991337877 🔗`;
-
                 return retailMarketingMsg;
             };
 
@@ -1281,7 +1232,7 @@
                     const newOrderRef = doc(collection(db, 'artifacts', appId, 'public', 'data', 'orders'));
                     batch.set(newOrderRef, {
                         items: cart, subTotal, discount: discountVal, deliveryFee: deliveryVal, total, paid, remaining: total-paid, initialPaid: paid, 
-                        customerName, customerPhone, employeeName: selectedEmployee, paymentMethod, customerId: selectedWholesaleId || null, isWholesale: !!isWholesale,
+                        customerName, customerPhone, employeeName: selectedEmployee, paymentMethod, customerId: selectedWholesaleId || null,
                         dateString: today, monthString: today.slice(0, 7), createdAt: serverTimestamp()
                     });
                     
