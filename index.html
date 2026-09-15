@@ -5,6 +5,18 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>نظام استوديو بولا V23.2</title>
     
+    <script>
+        // إعادة تحميل مرة واحدة عند فتح البرنامج عشان المنتجات والملفات تتحمل صح
+        (function () {
+            try {
+                var key = 'paula_v232_boot_reload';
+                if (!sessionStorage.getItem(key)) {
+                    sessionStorage.setItem(key, '1');
+                    location.reload();
+                }
+            } catch (e) {}
+        })();
+    </script>
     <script src="https://cdn.tailwindcss.com"></script>
     
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
@@ -82,7 +94,7 @@
         import { 
           ShoppingCart, Plus, Trash2, Send, Package, Edit,
           Wallet, Lock, Search, Smartphone, X, Banknote, MinusCircle, Zap, Users, LogOut, Key, 
-          Settings, Check, RefreshCcw, AlertTriangle, FileText, Printer, Percent, Camera, Layers, UserCheck, TrendingUp, ShieldCheck, ClipboardList, Download, Upload, Database, CheckCircle, BellRing, Star
+          Settings, Check, RefreshCcw, AlertTriangle, FileText, Printer, Percent, Camera, Layers, UserCheck, TrendingUp, ShieldCheck, ClipboardList, Download, Upload, Database, CheckCircle, BellRing, Star, FolderPlus
         } from 'lucide-react';
 
         // =========================================================================
@@ -1677,6 +1689,133 @@
                 }
             };
 
+            const sanitizeFolderName = (name) => {
+                return String(name || 'عميل').replace(/[\\/:*?"<>|]/g, '-').trim() || 'عميل';
+            };
+
+            const buildOrderText = (order) => {
+                const itemsStr = (order.items || []).map(i => `• ${i.name} (x${i.qty}) = ${(i.qty * (i.currentPrice || i.price || 0))} ج`).join('\n');
+                return [
+                    'استوديو ومكتب بولا عماد',
+                    '========================',
+                    'اسم العميل: ' + (order.customerName || 'بدون اسم'),
+                    'رقم التليفون: ' + (order.customerPhone || 'غير مسجل'),
+                    'تاريخ الطلب: ' + (order.dateString || ''),
+                    order.employeeName ? ('الموظف: ' + order.employeeName) : '',
+                    '========================',
+                    'تفاصيل الأوردر:',
+                    itemsStr || 'لا توجد أصناف',
+                    '========================',
+                    'الإجمالي: ' + (order.total || 0) + ' ج',
+                    'المدفوع: ' + (order.paid || 0) + ' ج',
+                    'الباقي: ' + (order.remaining || 0) + ' ج',
+                    order.deliveryFee ? ('دليفري: ' + order.deliveryFee + ' ج') : ''
+                ].filter(Boolean).join('\n');
+            };
+
+            const makeUtf8 = (str) => new TextEncoder().encode(str);
+
+            const crc32 = (buf) => {
+                let crc = 0 ^ (-1);
+                const table = window.__crc32table || (window.__crc32table = (function(){
+                    const t = new Uint32Array(256);
+                    for (let i=0;i<256;i++){
+                        let c=i;
+                        for (let k=0;k<8;k++) c = (c & 1) ? (0xEDB88320 ^ (c >>> 1)) : (c >>> 1);
+                        t[i]=c>>>0;
+                    }
+                    return t;
+                })());
+                for (let i=0;i<buf.length;i++) crc = (crc >>> 8) ^ table[(crc ^ buf[i]) & 0xFF];
+                return (crc ^ (-1)) >>> 0;
+            };
+
+            const buildZipWithFolder = (folderName, fileName, text) => {
+                const path = folderName.replace(/\\/g,'/').replace(/\/+$/,'') + '/' + fileName;
+                const data = makeUtf8(text);
+                const nameBytes = makeUtf8(path);
+                const crc = crc32(data);
+                const now = new Date();
+                const dosTime = ((now.getHours() << 11) | (now.getMinutes() << 5) | (now.getSeconds()/2)) & 0xFFFF;
+                const dosDate = (((now.getFullYear()-1980) << 9) | ((now.getMonth()+1) << 5) | now.getDate()) & 0xFFFF;
+                const local = new Uint8Array(30 + nameBytes.length + data.length);
+                const dv = new DataView(local.buffer);
+                dv.setUint32(0, 0x04034b50, true);
+                dv.setUint16(4, 20, true);
+                dv.setUint16(6, 0x0800, true); // utf-8
+                dv.setUint16(8, 0, true);
+                dv.setUint16(10, dosTime, true);
+                dv.setUint16(12, dosDate, true);
+                dv.setUint32(14, crc, true);
+                dv.setUint32(18, data.length, true);
+                dv.setUint32(22, data.length, true);
+                dv.setUint16(26, nameBytes.length, true);
+                dv.setUint16(28, 0, true);
+                local.set(nameBytes, 30);
+                local.set(data, 30 + nameBytes.length);
+                const central = new Uint8Array(46 + nameBytes.length);
+                const cv = new DataView(central.buffer);
+                cv.setUint32(0, 0x02014b50, true);
+                cv.setUint16(4, 20, true);
+                cv.setUint16(6, 20, true);
+                cv.setUint16(8, 0x0800, true);
+                cv.setUint16(10, 0, true);
+                cv.setUint16(12, dosTime, true);
+                cv.setUint16(14, dosDate, true);
+                cv.setUint32(16, crc, true);
+                cv.setUint32(20, data.length, true);
+                cv.setUint32(24, data.length, true);
+                cv.setUint16(28, nameBytes.length, true);
+                central.set(nameBytes, 46);
+                const end = new Uint8Array(22);
+                const ev = new DataView(end.buffer);
+                ev.setUint32(0, 0x06054b50, true);
+                ev.setUint16(8, 1, true);
+                ev.setUint16(10, 1, true);
+                ev.setUint32(12, central.length, true);
+                ev.setUint32(16, local.length, true);
+                const out = new Uint8Array(local.length + central.length + end.length);
+                out.set(local, 0);
+                out.set(central, local.length);
+                out.set(end, local.length + central.length);
+                return out;
+            };
+
+            const downloadBlob = (blob, filename) => {
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = filename;
+                document.body.appendChild(a);
+                a.click();
+                setTimeout(() => { URL.revokeObjectURL(url); a.remove(); }, 1500);
+            };
+
+            const createCustomerFolder = async (order) => {
+                const folderName = sanitizeFolderName(order.customerName);
+                const text = buildOrderText(order);
+                const fileName = 'بيانات الطلب.txt';
+                try {
+                    if (window.showDirectoryPicker) {
+                        const rootDir = await window.showDirectoryPicker({ mode: 'readwrite', startIn: 'downloads' });
+                        const dir = await rootDir.getDirectoryHandle(folderName, { create: true });
+                        const fh = await dir.getFileHandle(fileName, { create: true });
+                        const w = await fh.createWritable();
+                        await w.write(text);
+                        await w.close();
+                        alert('تم إنشاء فولدر «' + folderName + '» وحفظ بيانات الطلب ✅');
+                        return;
+                    }
+                } catch (e) {
+                    if (e && e.name === 'AbortError') return;
+                    console.error(e);
+                }
+                // بديل: تحميل فولدر مضغوط يفتح باسم العميل وفيه التكست
+                const zip = buildZipWithFolder(folderName, fileName, text);
+                downloadBlob(new Blob([zip], { type: 'application/zip' }), folderName + '.zip');
+                alert('تم تحميل فولدر العميل. فك الضغط عشان يفتح فولدر باسم العميل وفيه ملف الطلب.');
+            };
+
             const handleUpdateOrder = async () => {
                 if(!editingOrder) return;
                 const paid = parseFloat(editAmount);
@@ -2201,6 +2340,9 @@
 
                                             <button onClick={()=>{setEditingOrder(order); setEditAmount(order.paid); setEditPayMethod('cash');}} className="bg-blue-50 text-blue-600 py-3 rounded-xl font-black text-xs flex items-center justify-center gap-2 hover:bg-blue-100 transition border border-blue-100">
                                                 <Edit size={14}/> تعديل المدفوع
+                                            </button>
+                                            <button onClick={()=>createCustomerFolder(order)} className="bg-amber-50 text-amber-700 py-3 rounded-xl font-black text-xs flex items-center justify-center gap-2 hover:bg-amber-100 transition border border-amber-100">
+                                                <FolderPlus size={14}/> إنشاء فولدر
                                             </button>
                                             <button onClick={() => {
                                                 const itemsStr = order.items.map(i=>`• ${i.name} (x${i.qty}) = ${i.qty*i.currentPrice} ج`).join('\n');
