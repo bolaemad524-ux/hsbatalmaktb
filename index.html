@@ -905,6 +905,7 @@
         // =====================================================================
         const OfficeSystem = ({ backToHome, orders, items, expenses, customers, employees, debtPayments, deletedLogs, ratings, db, appId, appSettings, setAppSettings }) => {
             const [tab, setTab] = useState('sales');
+            const [salesFolderMade, setSalesFolderMade] = useState(false);
             const [waSelectedOrder, setWaSelectedOrder] = useState(null);
             const [waFiles, setWaFiles] = useState([]);
             const [waSearch, setWaSearch] = useState('');
@@ -1203,7 +1204,7 @@
             const resetSalesTab = () => {
                 setCart([]); setAmountPaid(''); setDiscount(''); setDeliveryFee(''); setCustomerName(''); 
                 setCustomerPhone(''); setSelectedWholesaleId(''); setSelectedEmployee(''); 
-                setIsWhatsAppSent(false); setEditingOrderId(null); setOriginalOrderItems([]);
+                setIsWhatsAppSent(false); setEditingOrderId(null); setOriginalOrderItems([]); setSalesFolderMade(false);
             };
 
             const handleEditOrderInSales = (order) => {
@@ -1262,6 +1263,14 @@
                 if(!isSmallOrder && (!customerName.trim() || !customerPhone.trim())) return alert("يرجى إدخال جميع البيانات (الاسم، الهاتف، الموظف)!");
                 if(!isSmallOrder && !isWhatsAppSent) return alert("يجب إرسال الفاتورة للعميل عبر واتساب أولاً لحفظها!");
                 if(isSmallOrder && customerPhone.trim() && !isWhatsAppSent) return alert("لو فيه رقم هاتف لازم تبعت الواتساب الأول!");
+
+                if (!salesFolderMade) {
+                    const wantFolder = window.confirm("هل تريد إنشاء فولدر لهذا العميل؟");
+                    if (wantFolder) {
+                        await createCustomerFolder(buildDraftOrderFromCart());
+                        setSalesFolderMade(true);
+                    }
+                }
 
                 const subTotal = cart.reduce((a,b)=>a+(b.currentPrice*b.qty),0);
                 const discountVal = parseFloat(discount) || 0;
@@ -1879,6 +1888,22 @@
                     ].join('\n');
                     return { folder, inner, item: it };
                 });
+            };
+
+            const buildDraftOrderFromCart = () => {
+                const subTotal = cart.reduce((a,b)=>a+(b.currentPrice*b.qty),0);
+                const discountVal = parseFloat(discount) || 0;
+                const deliveryVal = parseFloat(deliveryFee) || 0;
+                const total = Math.max(0, subTotal - discountVal + deliveryVal);
+                const paid = parseFloat(amountPaid)||0;
+                return {
+                    customerName: customerName.trim() || 'عميل',
+                    customerPhone: customerPhone.trim() || '',
+                    employeeName: selectedEmployee || '',
+                    dateString: today,
+                    items: cart,
+                    total, paid, remaining: total-paid, deliveryFee: deliveryVal, discount: discountVal
+                };
             };
 
             const createCustomerFolder = async (order) => {
@@ -2503,6 +2528,19 @@
                                         const isSmall = currentTotal < 5;
                                         const canSave = isWhatsAppSent || (isSmall && !customerPhone.trim());
                                         return (
+                                     <>
+                                     <button
+                                        type="button"
+                                        onClick={async () => {
+                                            if (!cart.length) return alert('السلة فارغة');
+                                            if (!customerName.trim() && !customerPhone.trim()) return alert('اكتب اسم العميل أو رقم التليفون أولاً');
+                                            await createCustomerFolder(buildDraftOrderFromCart());
+                                            setSalesFolderMade(true);
+                                        }}
+                                        className={`w-full py-3 rounded-2xl font-black mb-2 border transition ${salesFolderMade ? 'bg-amber-100 text-amber-800 border-amber-200' : 'bg-amber-50 text-amber-700 border-amber-100 hover:bg-amber-100'}`}
+                                     >
+                                        {salesFolderMade ? 'تم إنشاء الفولدر ✅' : 'إنشاء فولدر للعميل'}
+                                     </button>
                                      <button 
                                         onClick={handleCheckout} 
                                         disabled={!canSave}
@@ -2510,6 +2548,7 @@
                                      >
                                         {canSave ? (editingOrderId ? 'تحديث الفاتورة ✅' : 'حفظ الفاتورة ✅') : (isSmall ? 'أدخل البيانات أو أرسل واتساب' : 'أرسل الواتساب أولاً للحفظ')}
                                      </button>
+                                     </>
                                         );
                                      })()}
                                 </div>
