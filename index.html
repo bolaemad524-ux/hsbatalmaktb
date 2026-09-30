@@ -90,7 +90,7 @@
         import { createRoot } from 'react-dom/client';
         import { initializeApp } from 'firebase/app';
         import { getAuth, signInAnonymously, onAuthStateChanged } from 'firebase/auth';
-        import { getFirestore, collection, addDoc, onSnapshot, doc, updateDoc, deleteDoc, serverTimestamp, increment, setDoc, query, where, getDocs, writeBatch } from 'firebase/firestore';
+        import { getFirestore, collection, addDoc, onSnapshot, doc, updateDoc, deleteDoc, serverTimestamp, increment, setDoc, query, where, getDocs, writeBatch, getDoc } from 'firebase/firestore';
         import { 
           ShoppingCart, Plus, Trash2, Send, Package, Edit,
           Wallet, Lock, Search, Smartphone, X, Banknote, MinusCircle, Zap, Users, LogOut, Key, 
@@ -160,25 +160,26 @@
         const seedShieldItems = async (existing) => {
             if (_shieldsSeeded) return;
             _shieldsSeeded = true;
-            const names = new Set((existing||[]).map(i => i.name));
-            for (const s of SHIELD_ITEMS) {
-                if (names.has(s.name)) continue;
-                try {
-                    await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'inventory'), {
-                        name: s.name,
-                        price: s.price,
-                        wholesalePrice: s.price,
-                        stock: 0,
-                        isLaser: false,
-                        isPrintingMaterial: true,
-                        isPrinting: false,
-                        pinLast: true,
-                        category: 'دروع',
-                        note: s.size + ' - تخانة ' + s.thick
-                    });
-                } catch (e) { console.error(e); }
-            }
+            try {
+                const settingsRef = doc(db, 'artifacts', appId, 'public', 'data', 'app_settings', 'general');
+                const sSnap = await getDoc(settingsRef);
+                if (sSnap.exists() && sSnap.data().shieldsSeeded) return;
+                const names = new Set((existing||[]).map(i => i.name));
+                const alreadyHas = SHIELD_ITEMS.some(x => names.has(x.name));
+                if (!alreadyHas) {
+                    for (let idx = 0; idx < SHIELD_ITEMS.length; idx++) {
+                        const x = SHIELD_ITEMS[idx];
+                        await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'inventory', 'shield_' + idx), {
+                            name: x.name, price: x.price, wholesalePrice: x.price, stock: 0,
+                            isLaser: false, isPrintingMaterial: true, isPrinting: false,
+                            pinLast: true, category: 'دروع', note: x.size + ' - تخانة ' + x.thick
+                        });
+                    }
+                }
+                await setDoc(settingsRef, { shieldsSeeded: true }, { merge: true });
+            } catch (e) { console.error(e); _shieldsSeeded = false; }
         };
+
 
         const RatingSystem = ({ db, appId }) => {
             const urlParams = new URLSearchParams(window.location.search);
@@ -558,7 +559,10 @@
         // --- MAIN APP COMPONENT ---
         const App = () => {
           const [user, setUser] = useState(null);
-          const [currentView, setCurrentView] = useState('landing');
+          const [currentView, setCurrentView] = useState(() => {
+              try { const v = new URLSearchParams(window.location.search).get('view'); return (v === 'rating' || v === 'statement') ? v : 'landing'; } catch (e) { return 'landing'; }
+          });
+          const isPublicView = currentView === 'rating' || currentView === 'statement';
           const [authView, setAuthView] = useState(null); 
           const [appSettings, setAppSettings] = useState({ 
               laser: '941997', 
@@ -596,7 +600,7 @@
           }, []);
 
           useEffect(() => {
-            if (!user) return;
+            if (!user || isPublicView) return;
             
             const settingsUnsub = onSnapshot(doc(db, 'artifacts', appId, 'public', 'data', 'app_settings', 'general'), (docSnap) => {
                 if (docSnap.exists()) {
@@ -604,7 +608,7 @@
                 } else {
                     setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'app_settings', 'general'), { 
                         laser: '941997', office: '0128', vaultPin: '3316', meterPrice: 250, commissionRate: 1 
-                    });
+                    }, { merge: true });
                 }
             });
 
@@ -612,7 +616,7 @@
               settingsUnsub,
               onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', 'inventory'), s => {
                   const list = s.docs.map(d=>({id:d.id, ...d.data()}));
-                  seedShieldItems(list);
+                  if (!s.metadata.fromCache) seedShieldItems(list);
                   setItems(sortInventory(list));
               }),
               onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', 'orders'), s => setOrders(s.docs.map(d=>({id:d.id, ...d.data()})).sort((a,b)=>(b.createdAt?.seconds||0)-(a.createdAt?.seconds||0)))),
@@ -625,7 +629,7 @@
               onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', 'ratings'), s => setRatings(s.docs.map(d=>({id:d.id, ...d.data()})).sort((a,b)=>(b.createdAt?.seconds||0)-(a.createdAt?.seconds||0)))), 
             ];
             return () => subs.forEach(unsub => unsub());
-          }, [user]);
+          }, [user, isPublicView]);
 
           const handleLogin = (target) => {
             if (String(pinInput) === String(appSettings[target])) { setCurrentView(target); setAuthView(null); setPinInput(''); }
@@ -1008,9 +1012,9 @@
 
             const availableYears = useMemo(() => {
                 const years = new Set([
-                    ...orders.map(o => o.dateString.slice(0, 4)),
-                    ...expenses.map(e => e.dateString.slice(0, 4)),
-                    ...debtPayments.map(d => d.dateString.slice(0, 4)),
+                    ...orders.map(o => (o.dateString||'').slice(0, 4)),
+                    ...expenses.map(e => (e.dateString||'').slice(0, 4)),
+                    ...debtPayments.map(d => (d.dateString||'').slice(0, 4)),
                     new Date().getFullYear().toString()
                 ]);
                 return Array.from(years).sort().reverse();
@@ -1155,7 +1159,7 @@
                 setCart([...cart, {
                     ...printModalItem,
                     name: `متر طباعه خامه (${l}م x ${w}م) - عدد ${c}`,
-                    qty: totalArea.toFixed(2), 
+                    qty: parseFloat(totalArea.toFixed(2)), 
                     currentPrice: unitPrice,
                     isPrinting: true
                 }]);
@@ -1190,8 +1194,7 @@
                     const price = isWholesale ? (itemToAddToOrder.wholesalePrice || itemToAddToOrder.price) : itemToAddToOrder.price;
                     const existingItemIndex = cart.findIndex(c => c.id === itemToAddToOrder.id && !c.soldByMeter);
                     if (existingItemIndex > -1) {
-                        const newCart = [...cart];
-                        newCart[existingItemIndex].qty += qty;
+                        const newCart = cart.map((c, idx) => idx === existingItemIndex ? {...c, qty: c.qty + qty} : c);
                         setCart(newCart);
                     } else {
                         setCart([...cart, {...itemToAddToOrder, qty, currentPrice: price}]);
@@ -1208,7 +1211,7 @@
             };
 
             const handleEditOrderInSales = (order) => {
-                setCart(order.items);
+                setCart((order.items||[]).map(i => ({...i})));
                 setCustomerName(order.customerName);
                 setCustomerPhone(order.customerPhone || '');
                 setAmountPaid(order.paid);
@@ -1223,13 +1226,20 @@
                     setSelectedWholesaleId('');
                 }
                 setEditingOrderId(order.id);
-                setOriginalOrderItems(order.items);
+                setOriginalOrderItems((order.items||[]).map(i => ({...i})));
                 setIsWhatsAppSent(false);
                 setTab('sales');
             };
 
             
             const handleCheckout = async () => {
+                if (window.__paulaSaving) return;
+                window.__paulaSaving = true;
+                try { await handleCheckoutInner(); }
+                catch (e) { console.error(e); alert('حدث خطأ أثناء الحفظ، حاول مرة أخرى'); }
+                finally { window.__paulaSaving = false; }
+            };
+            const handleCheckoutInner = async () => {
                 if(!cart.length) return alert("السلة فارغة");
                 const subTotalTemp = cart.reduce((a,b)=>a+(b.currentPrice*b.qty),0);
                 const discountValTemp = parseFloat(discount) || 0;
@@ -1241,7 +1251,7 @@
                 if (customerName.trim() || customerPhone.trim()) {
                     const todayDate = new Date(today);
                     const overdueForCustomer = orders.filter(o => {
-                        if (o.remaining <= 0 || !o.dateString) return false;
+                        if (o.remaining <= 0 || !o.dateString || o.id === editingOrderId) return false;
                         const nameMatch = customerName.trim() && o.customerName === customerName.trim();
                         const phoneMatch = customerPhone.trim() && o.customerPhone && (
                             o.customerPhone === customerPhone.trim() ||
@@ -1284,14 +1294,25 @@
                     const orderRef = doc(db, 'artifacts', appId, 'public', 'data', 'orders', editingOrderId);
                     batch.update(orderRef, {
                         items: cart, subTotal, discount: discountVal, deliveryFee: deliveryVal, total, paid, remaining: total-paid,
-                        customerName, customerPhone, employeeName: selectedEmployee, paymentMethod, customerId: selectedWholesaleId || null
+                        customerName, customerPhone, employeeName: selectedEmployee, customerId: selectedWholesaleId || null
                     });
+                    const prevOrder = orders.find(o => o.id === editingOrderId);
+                    const paidDiff = paid - (parseFloat(prevOrder && prevOrder.paid) || 0);
+                    if (paidDiff !== 0) {
+                        batch.set(doc(collection(db, 'artifacts', appId, 'public', 'data', 'debt_payments')), {
+                            amount: paidDiff, orderId: editingOrderId, customerName, customerPhone,
+                            paymentMethod, dateString: today, createdAt: serverTimestamp(), note: 'تعديل فاتورة من شاشة البيع'
+                        });
+                    }
 
                     // إرجاع المخزون القديم
                     for(let i of originalOrderItems) {
-                        if(!i.isPrinting && i.id) {
-                            const itemRef = doc(db, 'artifacts', appId, 'public', 'data', 'inventory', i.id);
-                            batch.update(itemRef, { stock: increment(i.qty) });
+                        if(!i.isPrintingMaterial && !i.isPrinting && i.id) {
+                            batch.update(doc(db, 'artifacts', appId, 'public', 'data', 'inventory', i.id), { stock: increment(Number(i.qty)||0) });
+                        }
+                        const origInv = items.find(x => x.id === i.id);
+                        if (origInv && origInv.linkedItemId) {
+                            batch.update(doc(db, 'artifacts', appId, 'public', 'data', 'inventory', origInv.linkedItemId), { stock: increment(Number(i.qty)||0) });
                         }
                     }
                     // خصم المخزون الجديد + الأصناف المربوطة
@@ -1760,7 +1781,7 @@
                     setDeleteStep(1);
                 } catch(e) {
                     console.error(e);
-                    setDeleteConfirmModal(null);
+                    alert('حدث خطأ أثناء حذف الفاتورة، تأكد من الاتصال وحاول مرة أخرى');
                     setDeleteStep(1);
                 }
             };
@@ -2068,11 +2089,6 @@
                             createdAt: serverTimestamp(),
                             note: diff > 0 ? 'تعديل المدفوع من الطلبات' : 'تخفيض المدفوع من الطلبات'
                         });
-                        // لو الدفع من المحفظة وعميل جملة: خصم/زيادة رصيد المحفظة
-                        if (editPayMethod === 'wallet' && editingOrder.customerId && diff > 0) {
-                            const custRef = doc(db, 'artifacts', appId, 'public', 'data', 'wholesale_customers', editingOrder.customerId);
-                            batch.update(custRef, { walletBalance: increment(-diff) });
-                        }
                     }
                     await batch.commit();
                     setEditingOrder(null); setEditAmount('');
@@ -2104,7 +2120,7 @@
 
             const handleUpdateCommRate = async () => {
                 if(!newCommRate) return;
-                await setDoc(doc(db,'artifacts',appId,'public','data','app_settings','general'), {...appSettings, commissionRate: parseFloat(newCommRate)});
+                await setDoc(doc(db,'artifacts',appId,'public','data','app_settings','general'), {commissionRate: parseFloat(newCommRate)}, {merge: true});
                 setShowCommModal(false);
             };
 
@@ -2133,13 +2149,13 @@
                     const updateField = target === 'vault' ? 'vaultPin' : target;
                     const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'app_settings', 'general');
                     await updateDoc(docRef, { [updateField]: passForm.new });
-                    setPassModal(null); setPassForm({old: '', new: ''});
-                } catch (e) { }
+                    setPassModal(null); setPassForm({old: '', new: ''}); alert('تم تغيير الرقم السري ✅');
+                } catch (e) { console.error(e); alert('حدث خطأ أثناء الحفظ'); }
             };
             
             const handleUpdateMeterPrice = async () => {
                 if(!newMeterPrice) return;
-                await setDoc(doc(db,'artifacts',appId,'public','data','app_settings','general'), {...appSettings, meterPrice: parseFloat(newMeterPrice)});
+                await setDoc(doc(db,'artifacts',appId,'public','data','app_settings','general'), {meterPrice: parseFloat(newMeterPrice)}, {merge: true});
                 setMeterPriceModal(false);
             };
 
@@ -2348,7 +2364,7 @@
                                     </div>
 
                                     {(() => {
-                                        const todayStr = new Date().toISOString().slice(0, 10);
+                                        const todayStr = today;
                                         const pendingOrders = orders.filter(o => 
                                             !o.readyForPickup && !o.delivered && (o.dateString || '') >= todayStr
                                         ).sort((a,b) => (a.dateString||'').localeCompare(b.dateString||''));
@@ -2444,7 +2460,7 @@
                                             else { setCustomerName(''); setCustomerPhone(''); setSelectedWholesaleId(''); }
                                         }}>
                                             <option value="">-- اختر العميل من القائمة --</option>
-                                            {customers.filter(c => c.name.includes(wholesaleSearch)).map(c=><option key={c.id} value={c.id}>{c.name}</option>)}
+                                            {customers.filter(c => (c.name||'').includes(wholesaleSearch)).map(c=><option key={c.id} value={c.id}>{c.name}</option>)}
                                         </select>
                                     </div>
                                 )}
@@ -2602,7 +2618,7 @@
 
                             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                                 {orders.filter(o => {
-                                    const searchMatch = o.customerName.includes(searchTerm) || (o.customerPhone && o.customerPhone.includes(searchTerm));
+                                    const searchMatch = (o.customerName||'').includes(searchTerm) || (o.customerPhone && o.customerPhone.includes(searchTerm));
                                     if (!searchMatch) return false;
                                     if (showUnpaidOnlyOrders) return !o.delivered;
                                     if (ordersViewFilter === 'ready') return o.readyForPickup && !o.delivered;
@@ -2762,7 +2778,7 @@
 
                             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                                 {sortInventory(items
-                                    .filter(i => i.name.includes(itemsSearch))
+                                    .filter(i => (i.name||'').includes(itemsSearch))
                                     .filter(i => showLowStock ? (!i.isPrintingMaterial && !i.isPrinting && i.stock < 5) : true)
                                 ).map(item => (
                                     <div key={item.id} className={`bg-white p-6 rounded-3xl shadow-sm border relative group flex flex-col justify-between min-h-[160px] transition-all ${item.stock < 5 && !item.isPrintingMaterial && !item.isPrinting ? 'border-red-200 bg-red-50/30' : 'border-slate-100'}`}>
@@ -2837,7 +2853,7 @@
                                     </div>
                                 ))}
 
-                                {items.filter(i => i.name.includes(itemsSearch)).filter(i => showLowStock ? (!i.isPrintingMaterial && !i.isPrinting && i.stock < 5) : true).length === 0 && (
+                                {items.filter(i => (i.name||'').includes(itemsSearch)).filter(i => showLowStock ? (!i.isPrintingMaterial && !i.isPrinting && i.stock < 5) : true).length === 0 && (
                                     <div className="col-span-full py-16 text-center flex flex-col items-center gap-4 opacity-40">
                                         <Package size={48}/>
                                         <p className="font-black text-xl">لا توجد نتائج مطابقة</p>
@@ -2903,7 +2919,7 @@
                             
                             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                                 {customers.filter(c => {
-                                    const matchSearch = c.name.includes(searchTerm) || (c.phone && c.phone.includes(searchTerm));
+                                    const matchSearch = (c.name||'').includes(searchTerm) || (c.phone && c.phone.includes(searchTerm));
                                     if (!matchSearch) return false;
                                     if (showUnpaidOnlyCustomers) {
                                         const debt = orders.filter(o => o.customerId === c.id || o.customerName === c.name).reduce((s, o) => s + (o.remaining || 0), 0);
@@ -2957,7 +2973,7 @@
                                         </div>
                                     );
                                 })}
-                                {customers.filter(c => c.name.includes(searchTerm) || (c.phone && c.phone.includes(searchTerm))).length === 0 && (
+                                {customers.filter(c => (c.name||'').includes(searchTerm) || (c.phone && c.phone.includes(searchTerm))).length === 0 && (
                                     <div className="col-span-full py-10 text-center font-bold text-slate-400">لا توجد نتائج مطابقة لعملاء الجملة</div>
                                 )}
                             </div>
@@ -3303,8 +3319,11 @@
                                                 <Percent size={16}/> تغيير نسبة العمولة
                                              </button>
 
-                                             <select 
-                                                className="bg-slate-100 font-black text-lg outline-none text-slate-700 p-3 rounded-xl" 
+                                             <button onClick={() => { setMeterPriceModal(true); setNewMeterPrice(appSettings.meterPrice || 250); }} className="bg-cyan-50 text-cyan-700 px-6 py-3 rounded-xl font-black text-sm hover:bg-cyan-600 hover:text-white transition flex items-center gap-2 shadow-sm">
+                                                <Printer size={16}/> سعر متر الطباعة ({appSettings.meterPrice || 250})
+                                             </button>
+
+                                             <select className="bg-slate-100 font-black text-lg outline-none text-slate-700 p-3 rounded-xl" 
                                                 value={reportYear} 
                                                 onChange={(e) => setReportYear(e.target.value)}
                                             >
@@ -3445,9 +3464,9 @@
                                     </div>
 
                                     {(() => {
-                                        const yearOrders = orders.filter(o => o.dateString.startsWith(reportYear));
-                                        const yearExpenses = expenses.filter(e => e.dateString.startsWith(reportYear));
-                                        const yearDebtPays = debtPayments.filter(dp => dp.dateString.startsWith(reportYear));
+                                        const yearOrders = orders.filter(o => (o.dateString||'').startsWith(reportYear));
+                                        const yearExpenses = expenses.filter(e => (e.dateString||'').startsWith(reportYear));
+                                        const yearDebtPays = debtPayments.filter(dp => (dp.dateString||'').startsWith(reportYear));
                                         
                                         const totalInc = yearOrders.reduce((s,o) => s + (o.initialPaid !== undefined ? o.initialPaid : o.paid), 0) 
                                                          + yearDebtPays.reduce((s,d) => s + d.amount, 0);
@@ -3474,9 +3493,9 @@
                                                     const monthsData = Array.from({length: 12}, (_, i) => {
                                                         const monthNum = (i + 1).toString().padStart(2, '0');
                                                         const monthKey = `${reportYear}-${monthNum}`;
-                                                        const mOrders = yearOrders.filter(o => o.dateString.startsWith(monthKey));
-                                                        const mExpenses = yearExpenses.filter(e => e.dateString.startsWith(monthKey));
-                                                        const mDebtPays = yearDebtPays.filter(dp => dp.dateString.startsWith(monthKey));
+                                                        const mOrders = yearOrders.filter(o => (o.dateString||'').startsWith(monthKey));
+                                                        const mExpenses = yearExpenses.filter(e => (e.dateString||'').startsWith(monthKey));
+                                                        const mDebtPays = yearDebtPays.filter(dp => (dp.dateString||'').startsWith(monthKey));
                                                         const mInc = mOrders.reduce((s,o) => s + (o.initialPaid !== undefined ? o.initialPaid : o.paid), 0) + mDebtPays.reduce((s,d) => s + d.amount, 0);
                                                         const mExp = mExpenses.reduce((s,e)=>s+e.amount,0);
                                                         return { i, mInc, mExp, mNet: mInc - mExp, monthName: new Date(reportYear, i).toLocaleString('ar-EG', { month: 'short' }) };
@@ -3506,9 +3525,9 @@
                                                     {Array.from({length: 12}, (_, i) => {
                                                         const monthNum = (i + 1).toString().padStart(2, '0');
                                                         const monthKey = `${reportYear}-${monthNum}`;
-                                                        const mOrders = yearOrders.filter(o => o.dateString.startsWith(monthKey));
-                                                        const mExpenses = yearExpenses.filter(e => e.dateString.startsWith(monthKey));
-                                                        const mDebtPays = yearDebtPays.filter(dp => dp.dateString.startsWith(monthKey));
+                                                        const mOrders = yearOrders.filter(o => (o.dateString||'').startsWith(monthKey));
+                                                        const mExpenses = yearExpenses.filter(e => (e.dateString||'').startsWith(monthKey));
+                                                        const mDebtPays = yearDebtPays.filter(dp => (dp.dateString||'').startsWith(monthKey));
 
                                                         const mInc = mOrders.reduce((s,o) => s + (o.initialPaid !== undefined ? o.initialPaid : o.paid), 0) 
                                                                      + mDebtPays.reduce((s,d) => s + d.amount, 0);
@@ -4026,7 +4045,7 @@
                                     {Array.from({length: 12}, (_, i) => {
                                         const monthNum = (i + 1).toString().padStart(2, '0');
                                         const monthKey = `${reportYear}-${monthNum}`;
-                                        const monthExpenses = expenses.filter(e => e.dateString.startsWith(monthKey));
+                                        const monthExpenses = expenses.filter(e => (e.dateString||'').startsWith(monthKey));
                                         
                                         if (monthExpenses.length === 0) return null;
 
@@ -4053,7 +4072,7 @@
                                             </div>
                                         );
                                     })}
-                                    {expenses.filter(e => e.dateString.startsWith(reportYear)).length === 0 && (
+                                    {expenses.filter(e => (e.dateString||'').startsWith(reportYear)).length === 0 && (
                                         <div className="text-center text-slate-400 font-black py-10">لا توجد مصروفات مسجلة لهذه السنة</div>
                                     )}
                                 </div>
