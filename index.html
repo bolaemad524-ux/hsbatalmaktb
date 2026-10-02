@@ -156,6 +156,20 @@
             return (a.name||'').localeCompare(b.name||'', 'ar');
         });
 
+        // ===== دوال مساعدة (إصلاح) =====
+        const normPhone = (p) => String(p || '').replace(/\D/g, '');
+        // مقارنة أرقام الموبايل بدقة (آخر 10 أرقام) بدل includes اللي كانت بتطابق عملاء غلط
+        const phonesMatch = (a, b) => {
+            const x = normPhone(a), y = normPhone(b);
+            if (!x || !y) return false;
+            if (x === y) return true;
+            if (x.length < 7 || y.length < 7) return false;
+            return x.slice(-10) === y.slice(-10);
+        };
+        const escHtml = (s) => String(s == null ? '' : s)
+            .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+
         let _shieldsSeeded = false;
         const seedShieldItems = async (existing) => {
             if (_shieldsSeeded) return;
@@ -181,6 +195,21 @@
         };
 
 
+        let _purgingTemp = false;
+        const purgeExpiredTempItems = async (list) => {
+            if (_purgingTemp) return;
+            const today = new Date().toLocaleDateString('en-CA');
+            const expired = (list || []).filter(i => i.isTemporary && i.expiresAt && i.expiresAt <= today);
+            if (!expired.length) return;
+            _purgingTemp = true;
+            try {
+                for (const i of expired) {
+                    await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'inventory', i.id));
+                }
+            } catch (e) { console.error(e); }
+            _purgingTemp = false;
+        };
+
         const RatingSystem = ({ db, appId }) => {
             const urlParams = new URLSearchParams(window.location.search);
             const cname = urlParams.get('cname') || '';
@@ -190,20 +219,28 @@
             const [hover, setHover] = useState(0);
             const [feedback, setFeedback] = useState('');
             const [submitted, setSubmitted] = useState(false);
+            const [sending, setSending] = useState(false);
 
             const handleSubmit = async () => {
                 if(rating === 0) return alert("برجاء اختيار تقييمك بعدد النجوم أولاً");
-                
-                await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'ratings'), {
-                    customerName: cname,
-                    customerPhone: cphone,
-                    stars: rating,
-                    feedback: feedback,
-                    dateString: new Date().toLocaleDateString('en-CA'),
-                    createdAt: serverTimestamp()
-                });
-                
-                setSubmitted(true);
+                if (sending) return;
+                setSending(true);
+                try {
+                    await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'ratings'), {
+                        customerName: cname,
+                        customerPhone: cphone,
+                        stars: rating,
+                        feedback: (feedback || '').slice(0, 1000),
+                        dateString: new Date().toLocaleDateString('en-CA'),
+                        createdAt: serverTimestamp()
+                    });
+                    setSubmitted(true);
+                } catch (e) {
+                    console.error(e);
+                    alert('حصلت مشكلة في إرسال التقييم، حاول مرة تانية');
+                } finally {
+                    setSending(false);
+                }
             };
 
             if (submitted) {
@@ -292,7 +329,7 @@
                 const unsubOrders = onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', 'orders'), snap => {
                     const all = snap.docs.map(d => ({id: d.id, ...d.data()}));
                     const filtered = all.filter(o => {
-                        if (cphone && o.customerPhone && (o.customerPhone === cphone || o.customerPhone.includes(cphone.replace(/^0/, '')) || cphone.includes((o.customerPhone||'').replace(/^0/, '')))) return true;
+                        if (cphone && phonesMatch(o.customerPhone, cphone)) return true;
                         if (cname && o.customerName === cname) return true;
                         return false;
                     }).sort((a,b) => (b.createdAt?.seconds||0) - (a.createdAt?.seconds||0));
@@ -304,7 +341,7 @@
                 const unsubCust = onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', 'wholesale_customers'), snap => {
                     const list = snap.docs.map(d => ({id: d.id, ...d.data()}));
                     const found = list.find(c => 
-                        (cphone && c.phone && (c.phone === cphone || c.phone.includes(cphone.replace(/^0/, '')) || cphone.includes((c.phone||'').replace(/^0/, '')))) ||
+                        (cphone && phonesMatch(c.phone, cphone)) ||
                         (cname && c.name === cname)
                     );
                     if (found) {
@@ -588,7 +625,7 @@
                 await signInAnonymously(auth).catch(e => console.error("Auth Error:", e));
             };
             initAuth();
-            onAuthStateChanged(auth, setUser);
+            const unsubAuth = onAuthStateChanged(auth, setUser);
 
             const urlParams = new URLSearchParams(window.location.search);
             const viewParam = urlParams.get('view');
@@ -597,6 +634,7 @@
             } else if (viewParam === 'statement') {
                 setCurrentView('statement');
             }
+          return () => unsubAuth();
           }, []);
 
           useEffect(() => {
@@ -616,7 +654,10 @@
               settingsUnsub,
               onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', 'inventory'), s => {
                   const list = s.docs.map(d=>({id:d.id, ...d.data()}));
-                  if (!s.metadata.fromCache) seedShieldItems(list);
+                  if (!s.metadata.fromCache) {
+                      seedShieldItems(list);
+                      purgeExpiredTempItems(list);
+                  }
                   setItems(sortInventory(list));
               }),
               onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', 'orders'), s => setOrders(s.docs.map(d=>({id:d.id, ...d.data()})).sort((a,b)=>(b.createdAt?.seconds||0)-(a.createdAt?.seconds||0)))),
@@ -729,13 +770,22 @@
             };
 
             const confirmSettle = async () => {
-                await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'laser_bills'), {
-                    description: "تصفية حساب الشريك (تصفير)",
-                    amount: stats.partnerShare * 2,
-                    dateString: today,
-                    createdAt: serverTimestamp()
-                });
-                setShowSettleConfirm(false);
+                if (window.__paulaSettling) return;
+                window.__paulaSettling = true;
+                try {
+                    await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'laser_bills'), {
+                        description: "تصفية حساب الشريك (تصفير)",
+                        amount: Math.round(stats.partnerShare * 2 * 100) / 100,
+                        dateString: today,
+                        createdAt: serverTimestamp()
+                    });
+                    setShowSettleConfirm(false);
+                } catch (e) {
+                    console.error(e);
+                    alert('حدث خطأ أثناء التصفية، حاول مرة أخرى');
+                } finally {
+                    window.__paulaSettling = false;
+                }
             };
 
             return (
@@ -849,7 +899,7 @@
                                     <div><div className="font-bold">{b.description}</div><div className="text-[10px] text-slate-500">{b.dateString}</div></div>
                                     <div className="flex items-center gap-4">
                                         <span className="font-black text-red-400">{b.amount} ج</span>
-                                        <button onClick={()=>deleteDoc(doc(db,'artifacts',appId,'public','data','laser_bills',b.id))} className="text-slate-600 hover:text-red-500 transition"><Trash2 size={16}/></button>
+                                        <button onClick={()=>{ if(window.confirm('متأكد إنك عايز تحذف الفاتورة دي؟ مش هينفع ترجعه تاني')) deleteDoc(doc(db,'artifacts',appId,'public','data','laser_bills',b.id)).catch(err=>{ console.error(err); alert('حدث خطأ أثناء الحذف'); }); }} className="text-slate-600 hover:text-red-500 transition"><Trash2 size={16}/></button>
                                     </div>
                                 </div>
                             ))}
@@ -864,7 +914,7 @@
                                 <input className="w-full p-3 bg-slate-900 rounded-xl mb-4 text-center font-black" placeholder="الوصف" value={billData.desc} onChange={e=>setBillData({...billData, desc:e.target.value})}/>
                                 <div className="flex gap-2">
                                     <button onClick={async()=>{
-                                        if(billData.amount && billData.desc){
+                                        if(billData.amount && billData.desc && Number.isFinite(parseFloat(billData.amount)) && parseFloat(billData.amount) > 0){
                                             await addDoc(collection(db,'artifacts',appId,'public','data','laser_bills'), {
                                                 description: billData.desc,
                                                 amount: parseFloat(billData.amount),
@@ -941,6 +991,11 @@
             
             // Modals & Tracking
             const [showAddItem, setShowAddItem] = useState(false);
+            const [showTempItem, setShowTempItem] = useState(false);
+            const [tempEmployee, setTempEmployee] = useState('');
+            const [tempName, setTempName] = useState('');
+            const [tempPrice, setTempPrice] = useState('');
+            const [tempWholesale, setTempWholesale] = useState('');
             const [editingStockItem, setEditingStockItem] = useState(null);
             const [newStockValue, setNewStockValue] = useState('');
             const [editItemData, setEditItemData] = useState({name: '', price: '', wholesalePrice: '', category: '', linkedItemId: '', soldByMeter: false, meterUnitPrice: ''});
@@ -1050,20 +1105,20 @@
 
 
             const getCustomerFooter = (cName, cPhone) => {
-                const isWholesaleCust = customers.some(c => c.name === cName || c.phone === cPhone);
+                const isWholesaleCust = customers.some(c => (cName && c.name === cName) || phonesMatch(c.phone, cPhone));
                 const currentUrl = window.location.href.split('?')[0];
-                const ratingLink = `${currentUrl}?view=rating&cname=${encodeURIComponent(cName||'')}&cphone=${cPhone||''}`;
+                const ratingLink = `${currentUrl}?view=rating&cname=${encodeURIComponent(cName||'')}&cphone=${encodeURIComponent(cPhone||'')}`;
                 const statementLink = `${currentUrl}?view=statement&phone=${encodeURIComponent(cPhone||'')}&cname=${encodeURIComponent(cName||'')}`;
                 const ratingMsg = `\nمتنساش تقيمنا من خلال الرابط ده عشان تساعدنا فى تطوير خدمتنا ✨👇\n${ratingLink}`;
                 
                 if (isWholesaleCust) {
-                    return `\n\nتابع حسباتك واسعارك من مكتب بولا من خلال رابط البرنامج الخاص بيك ✨👇\n${statementLink}\n\n⚠️ *تنبيه هام:*\nبرجاء سداد قيمة الفاتورة خلال 3 أيام لضمان استمرار إصدار الفواتير الجديدة لحسابكم.\nشاكرين حسن تعاونكم وتفهمكم الدائم.`; 
+                    return `\n\nتابع حسباتك واسعارك من مكتب بولا من خلال رابط البرنامج الخاص بيك ✨👇\n${statementLink}\n\n⚠️ *تنبيه هام:*\nبرجاء سداد قيمة الفاتورة خلال 3 أيام لضمان استمرار إصدار الفواتير الجديدة لحسابكم.\nشاكرين حسن تعاونكم وتفهمكم الدائم.` + ratingMsg; 
                 }
                 
                 const retailMarketingMsg = appSettings.retailFooterMsg 
                     ? `\n${appSettings.retailFooterMsg}` 
                     : `\nمتنساش تتابع صفحتنا على الفيس بوك ✨👇\nhttps://www.facebook.com/share/18o6vPJTep/\nوخلي المتجر معاك وتابع أقوى الخصومات 🔥😉👇\nhttps://bolaemad524-ux.github.io/matheronline-/?store=store_1773991337877 🔗`;
-                return retailMarketingMsg;
+                return retailMarketingMsg + ratingMsg;
             };
 
             const handleExportInventory = () => {
@@ -1091,9 +1146,12 @@
                         if(!window.confirm(`سيتم إضافة ${importedItems.length} صنف إلى المخزن. هل أنت متأكد؟`)) return;
 
                         let count = 0;
+                        const knownNames = new Set(items.map(i => i.name));
                         for (const itemData of importedItems) {
-                            const exists = items.some(i => i.name === itemData.name);
+                            if (!itemData || !itemData.name) continue;
+                            const exists = knownNames.has(itemData.name);
                             if (!exists) {
+                                knownNames.add(itemData.name);
                                 const { id, ...data } = itemData;
                                 await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'inventory'), data);
                                 count++;
@@ -1246,6 +1304,9 @@
                 const deliveryValTemp = parseFloat(deliveryFee) || 0;
                 const totalTemp = Math.max(0, subTotalTemp - discountValTemp + deliveryValTemp);
                 const isSmallOrder = totalTemp < 5;
+                const paidTemp = parseFloat(amountPaid) || 0;
+                if (paidTemp < 0) return alert("المبلغ المدفوع لا يمكن أن يكون بالسالب");
+                if (paidTemp > totalTemp && !window.confirm(`المبلغ المدفوع (${paidTemp} ج) أكبر من إجمالي الفاتورة (${totalTemp} ج). هل تريد المتابعة؟`)) return;
 
                 // منع عمل فاتورة جديدة لو العميل عليه ديون متأخرة (+3 أيام)
                 if (customerName.trim() || customerPhone.trim()) {
@@ -1253,11 +1314,7 @@
                     const overdueForCustomer = orders.filter(o => {
                         if (o.remaining <= 0 || !o.dateString || o.id === editingOrderId) return false;
                         const nameMatch = customerName.trim() && o.customerName === customerName.trim();
-                        const phoneMatch = customerPhone.trim() && o.customerPhone && (
-                            o.customerPhone === customerPhone.trim() ||
-                            o.customerPhone.includes(customerPhone.trim().replace(/^0/, '')) ||
-                            customerPhone.trim().includes((o.customerPhone||'').replace(/^0/, ''))
-                        );
+                        const phoneMatch = customerPhone.trim() && phonesMatch(o.customerPhone, customerPhone);
                         if (!nameMatch && !phoneMatch) return false;
                         const oDate = new Date(o.dateString);
                         const diffDays = (todayDate.getTime() - oDate.getTime()) / (1000 * 3600 * 24);
@@ -1277,8 +1334,8 @@
                 if (!salesFolderMade) {
                     const wantFolder = window.confirm("هل تريد إنشاء فولدر لهذا العميل؟");
                     if (wantFolder) {
-                        await createCustomerFolder(buildDraftOrderFromCart());
-                        setSalesFolderMade(true);
+                        const folderOk = await createCustomerFolder(buildDraftOrderFromCart());
+                        if (folderOk !== false) setSalesFolderMade(true);
                     }
                 }
 
@@ -1437,7 +1494,7 @@
                 try {
                     const itemsRows = (order.items || []).map(i => `
                         <tr>
-                            <td style="padding:10px;border-bottom:1px solid #ddd;text-align:right;">${i.name}</td>
+                            <td style="padding:10px;border-bottom:1px solid #ddd;text-align:right;">${escHtml(i.name)}</td>
                             <td style="padding:10px;border-bottom:1px solid #ddd;text-align:center;">${i.qty}</td>
                             <td style="padding:10px;border-bottom:1px solid #ddd;text-align:center;">${i.currentPrice}</td>
                             <td style="padding:10px;border-bottom:1px solid #ddd;text-align:center;font-weight:bold;">${(i.qty * i.currentPrice).toFixed(0)}</td>
@@ -1448,7 +1505,7 @@
 <html dir="rtl" lang="ar">
 <head>
 <meta charset="UTF-8">
-<title>فاتورة - ${order.customerName || ''}</title>
+<title>فاتورة - ${escHtml(order.customerName || '')}</title>
 <style>
   @page { size: A4; margin: 15mm; }
   body { font-family: Tahoma, Arial, sans-serif; margin: 0; padding: 0; color: #111; }
@@ -1477,8 +1534,8 @@
       <p>التاريخ: ${order.dateString || ''}</p>
     </div>
     <div class="info">
-      <div><strong>العميل:</strong> ${order.customerName || ''}</div>
-      <div><strong>الهاتف:</strong> ${order.customerPhone || '---'}</div>
+      <div><strong>العميل:</strong> ${escHtml(order.customerName || '')}</div>
+      <div><strong>الهاتف:</strong> ${escHtml(order.customerPhone || '---')}</div>
     </div>
     <table>
       <thead>
@@ -1521,18 +1578,26 @@
 
             const executeQuickPay = async (method) => {
                 if(!payConfirmModal) return;
+                if (window.__paulaQuickPay) return;
+                window.__paulaQuickPay = true;
                 try {
+                    // نستخدم آخر نسخة من الفاتورة، ونزوّد المدفوع بالفرق (increment) بدل ما نكتب فوق القيمة
+                    const live = orders.find(o => o.id === payConfirmModal.id) || payConfirmModal;
+                    const due = Number(live.remaining) || 0;
+                    if (due <= 0) { setPayConfirmModal(null); return; }
+
                     const batch = writeBatch(db); 
                     const orderRef = doc(db, 'artifacts', appId, 'public', 'data', 'orders', payConfirmModal.id);
                     batch.update(orderRef, {
-                        paid: payConfirmModal.total,
-                        remaining: 0
+                        paid: increment(due),
+                        remaining: increment(-due)
                     });
                     const paymentRef = doc(collection(db, 'artifacts', appId, 'public', 'data', 'debt_payments'));
                     batch.set(paymentRef, {
-                        amount: payConfirmModal.remaining,
+                        amount: due,
                         orderId: payConfirmModal.id,
-                        customerName: payConfirmModal.customerName,
+                        customerName: payConfirmModal.customerName || '',
+                        customerPhone: payConfirmModal.customerPhone || '',
                         paymentMethod: method, 
                         dateString: today, 
                         createdAt: serverTimestamp()
@@ -1540,7 +1605,8 @@
 
                     await batch.commit();
                     setPayConfirmModal(null);
-                } catch(e) { alert("حدث خطأ"); }
+                } catch(e) { console.error(e); alert("حدث خطأ"); }
+                finally { window.__paulaQuickPay = false; }
             };
             
             const handleAddCustomerWallet = async (method) => {
@@ -1662,7 +1728,7 @@
                 let amountToPay = order.remaining;
                 
                 if (method === 'customer_wallet') {
-                    amountToPay = Math.min(order.remaining, activeCustomer.walletBalance);
+                    amountToPay = Math.min(order.remaining, activeCustomer.walletBalance || 0);
                 }
 
                 try {
@@ -1693,7 +1759,7 @@
                     await batch.commit();
                     setSingleOrderPayConfirm(null);
                 } catch(e) { 
-                    console.error(e);
+                    console.error(e); alert('حدث خطأ أثناء السداد');
                 }
             };
 
@@ -1736,13 +1802,22 @@
                 if(!deleteReason.trim()) return alert("يجب كتابة سبب الحذف!");
                 const emp = employeeWhoDeleted || deleteEmployee;
                 if(!emp) return alert("يجب اختيار الموظف الذي يقوم بالحذف!");
+                if (window.__paulaDeleting) return;
+                window.__paulaDeleting = true;
 
                 try {
                     const orderId = deleteConfirmModal.id;
-                    
-                    await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'deleted_logs'), {
+
+                    // نقرأ مدفوعات الفاتورة الأول
+                    const q = query(collection(db, 'artifacts', appId, 'public', 'data', 'debt_payments'), where('orderId', '==', orderId));
+                    const snapshot = await getDocs(q);
+
+                    // كل الخطوات في عملية واحدة (all-or-nothing): لو النت فصل مفيش مخزون يترجع مرتين ولا سجل حذف مكرر
+                    const batch = writeBatch(db);
+
+                    batch.set(doc(collection(db, 'artifacts', appId, 'public', 'data', 'deleted_logs')), {
                         orderId: orderId,
-                        customerName: deleteConfirmModal.customerName,
+                        customerName: deleteConfirmModal.customerName || '',
                         customerPhone: deleteConfirmModal.customerPhone || '',
                         total: deleteConfirmModal.total,
                         reason: deleteReason,
@@ -1753,28 +1828,23 @@
                     });
 
                     // إرجاع أصناف الفاتورة للمخزن
-                    const restoreBatch = writeBatch(db);
                     for (const i of (deleteConfirmModal.items || [])) {
                         if (!i.isPrinting && !i.isPrintingMaterial && i.id) {
                             const itemRef = doc(db, 'artifacts', appId, 'public', 'data', 'inventory', i.id);
-                            restoreBatch.update(itemRef, { stock: increment(i.qty || 0) });
+                            batch.update(itemRef, { stock: increment(Number(i.qty) || 0) });
                         }
                         const invItem = items.find(x => x.id === i.id);
                         if (invItem && invItem.linkedItemId) {
                             const linkedRef = doc(db, 'artifacts', appId, 'public', 'data', 'inventory', invItem.linkedItemId);
-                            restoreBatch.update(linkedRef, { stock: increment(i.qty || 0) });
+                            batch.update(linkedRef, { stock: increment(Number(i.qty) || 0) });
                         }
                     }
-                    await restoreBatch.commit();
 
-                    const q = query(collection(db, 'artifacts', appId, 'public', 'data', 'debt_payments'), where('orderId', '==', orderId));
-                    const snapshot = await getDocs(q);
-                    
-                    const deletePromises = snapshot.docs.map(d => deleteDoc(d.ref));
-                    await Promise.all(deletePromises);
-            
-                    await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'orders', orderId));
-                    
+                    snapshot.docs.forEach(d => batch.delete(d.ref));
+                    batch.delete(doc(db, 'artifacts', appId, 'public', 'data', 'orders', orderId));
+
+                    await batch.commit();
+
                     setDeleteConfirmModal(null);
                     setDeleteReason(''); 
                     setDeleteEmployee('');
@@ -1783,6 +1853,8 @@
                     console.error(e);
                     alert('حدث خطأ أثناء حذف الفاتورة، تأكد من الاتصال وحاول مرة أخرى');
                     setDeleteStep(1);
+                } finally {
+                    window.__paulaDeleting = false;
                 }
             };
 
@@ -1948,10 +2020,10 @@
                             await sw.close();
                         }
                         alert('تم إنشاء فولدر «' + folderName + '» وفيه فولدر لكل صنف + فاتورة العميل ✅');
-                        return;
+                        return true;
                     }
                 } catch (e) {
-                    if (e && e.name === 'AbortError') return;
+                    if (e && e.name === 'AbortError') return false;
                     console.error(e);
                 }
                 const zipFiles = [{ name: fileName, bytes: makeUtf8(text) }];
@@ -1961,6 +2033,7 @@
                 const zip = buildZipFolder(folderName, zipFiles);
                 downloadBlob(new Blob([zip], { type: 'application/zip' }), folderName + '.zip');
                 alert('اختار مكان الحفظ من نافذة التحميل. الفولدر باسم العميل وفيه فولدر لكل صنف + التكست.');
+                return true;
             };
 
             const buildZipFolder = (folderName, files) => {
@@ -2071,6 +2144,7 @@
                 const oldPaid = parseFloat(editingOrder.paid) || 0;
                 const diff = paid - oldPaid;
                 const remaining = editingOrder.total - paid;
+                if (paid > editingOrder.total && !window.confirm(`المبلغ (${paid} ج) أكبر من إجمالي الفاتورة (${editingOrder.total} ج). هل تريد المتابعة؟`)) return;
                 try {
                     const batch = writeBatch(db);
                     batch.update(doc(db, 'artifacts', appId, 'public', 'data', 'orders', editingOrder.id), {
@@ -2100,40 +2174,51 @@
             };
             
             const handleAddVaultExpense = async () => {
-                if(vaultExpenseData.amount && vaultExpenseData.desc){
+                const amount = parseFloat(vaultExpenseData.amount);
+                if (!vaultExpenseData.desc || !vaultExpenseData.desc.trim()) return alert("اكتب وصف المصروف");
+                if (!Number.isFinite(amount) || amount <= 0) return alert("اكتب مبلغ صحيح أكبر من صفر");
+                try {
                     await addDoc(collection(db,'artifacts',appId,'public','data','expenses'), {
-                        description: vaultExpenseData.desc + " (من الخزنة)",
-                        amount: parseFloat(vaultExpenseData.amount),
+                        description: vaultExpenseData.desc.trim() + " (من الخزنة)",
+                        amount: amount,
                         dateString: today,
                         createdAt: serverTimestamp()
                     });
                     setShowVaultExpenseModal(false); setVaultExpenseData({amount:'', desc:''});
-                }
+                } catch (e) { console.error(e); alert('حدث خطأ أثناء حفظ المصروف'); }
             };
             
             const handleAddEmployee = async () => {
-                if(newEmployeeName.trim()) {
-                    await addDoc(collection(db,'artifacts',appId,'public','data','employees'), { name: newEmployeeName });
+                const name = newEmployeeName.trim();
+                if (!name) return;
+                if (employees.some(e => e.name === name)) return alert("الموظف ده موجود بالفعل");
+                try {
+                    await addDoc(collection(db,'artifacts',appId,'public','data','employees'), { name });
                     setNewEmployeeName('');
-                }
+                } catch (e) { console.error(e); alert('حدث خطأ أثناء إضافة الموظف'); }
             };
 
             const handleUpdateCommRate = async () => {
-                if(!newCommRate) return;
-                await setDoc(doc(db,'artifacts',appId,'public','data','app_settings','general'), {commissionRate: parseFloat(newCommRate)}, {merge: true});
-                setShowCommModal(false);
+                const rate = parseFloat(newCommRate);
+                if (!Number.isFinite(rate) || rate < 0 || rate > 100) return alert("اكتب نسبة صحيحة بين 0 و 100");
+                try {
+                    await setDoc(doc(db,'artifacts',appId,'public','data','app_settings','general'), {commissionRate: rate}, {merge: true});
+                    setShowCommModal(false);
+                } catch (e) { console.error(e); alert('حدث خطأ أثناء الحفظ'); }
             };
 
             const [editingExpense, setEditingExpense] = useState(null);
             const handleUpdateExpense = async () => {
                 if(!editingExpense) return;
+                const amount = parseFloat(editingExpense.amount);
+                if (!Number.isFinite(amount) || amount <= 0) return alert("اكتب مبلغ صحيح أكبر من صفر");
                 try {
                     await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'expenses', editingExpense.id), {
-                        amount: parseFloat(editingExpense.amount),
+                        amount: amount,
                         description: editingExpense.description
                     });
                     setEditingExpense(null);
-                } catch(e) { }
+                } catch(e) { console.error(e); alert('حدث خطأ أثناء تعديل المصروف'); }
             };
 
             const handlePassChange = async () => {
@@ -2154,9 +2239,12 @@
             };
             
             const handleUpdateMeterPrice = async () => {
-                if(!newMeterPrice) return;
-                await setDoc(doc(db,'artifacts',appId,'public','data','app_settings','general'), {meterPrice: parseFloat(newMeterPrice)}, {merge: true});
-                setMeterPriceModal(false);
+                const price = parseFloat(newMeterPrice);
+                if (!Number.isFinite(price) || price <= 0) return alert("اكتب سعر متر صحيح أكبر من صفر");
+                try {
+                    await setDoc(doc(db,'artifacts',appId,'public','data','app_settings','general'), {meterPrice: price}, {merge: true});
+                    setMeterPriceModal(false);
+                } catch (e) { console.error(e); alert('حدث خطأ أثناء الحفظ'); }
             };
 
             return (
@@ -2609,7 +2697,7 @@
                                             </div>
                                             <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition">
                                                 <button onClick={()=>setEditingExpense(e)} className="p-2 bg-blue-50 text-blue-500 rounded-lg hover:bg-blue-100"><Edit size={12}/></button>
-                                                <button onClick={()=>deleteDoc(doc(db,'artifacts',appId,'public','data','expenses',e.id))} className="p-2 bg-red-50 text-red-500 rounded-lg hover:bg-red-100"><Trash2 size={12}/></button>
+                                                <button onClick={()=>{ if(window.confirm('متأكد إنك عايز تحذف المصروف ده؟ مش هينفع ترجعه تاني')) deleteDoc(doc(db,'artifacts',appId,'public','data','expenses',e.id)).catch(err=>{ console.error(err); alert('حدث خطأ أثناء الحذف'); }); }} className="p-2 bg-red-50 text-red-500 rounded-lg hover:bg-red-100"><Trash2 size={12}/></button>
                                             </div>
                                         </div>
                                     ))}
@@ -2773,6 +2861,15 @@
                                     }} className="flex-1 md:flex-none bg-emerald-600 hover:bg-emerald-700 text-white px-6 py-3 rounded-xl font-black text-sm flex items-center justify-center gap-2 transition shadow-md">
                                         <Plus size={18}/> صنف جديد
                                     </button>
+                                    <button type="button" onClick={()=>{
+                                        setTempEmployee('');
+                                        setTempName('');
+                                        setTempPrice('');
+                                        setTempWholesale('');
+                                        setShowTempItem(true);
+                                    }} className="flex-1 md:flex-none bg-amber-500 hover:bg-amber-600 text-white px-6 py-3 rounded-xl font-black text-sm flex items-center justify-center gap-2 transition shadow-md">
+                                        صنف مؤقت
+                                    </button>
                                 </div>
                             </div>
 
@@ -2787,7 +2884,7 @@
                                         </div>
 
                                         <div>
-                                            <div className="text-sm font-black text-slate-700 pr-2 border-r-4 border-slate-200 mb-2">{item.name}</div>
+                                            <div className="text-sm font-black text-slate-700 pr-2 border-r-4 border-slate-200 mb-2">{item.name}{item.isTemporary && item.tempEmployee ? ` (${item.tempEmployee})` : ''}{item.isTemporary ? <span className="mr-2 text-[10px] bg-amber-100 text-amber-700 px-2 py-0.5 rounded-lg">مؤقت</span> : null}</div>
                                             <div className="flex gap-2 text-xs font-bold mb-4">
                                                 <span className="bg-emerald-50 text-emerald-700 px-2 py-1 rounded">ق: {item.price}ج</span>
                                                 <span className="bg-amber-50 text-amber-700 px-2 py-1 rounded">ج: {item.wholesalePrice||item.price}ج</span>
@@ -2913,7 +3010,14 @@
                                 <input id="c-phone" className="w-full p-4 bg-slate-50 rounded-2xl font-black border-2 border-transparent focus:border-emerald-500 outline-none" placeholder="رقم الموبايل"/>
                                 <button onClick={async()=>{
                                     const n=document.getElementById('c-name').value, p=document.getElementById('c-phone').value;
-                                    if(n){ await addDoc(collection(db,'artifacts',appId,'public','data','wholesale_customers'), {name:n, phone:p, createdAt:serverTimestamp()}); alert("تم إضافة العميل بنجاح ✅"); }
+                                    const nn=(n||'').trim(), pp=(p||'').trim();
+                                    if(!nn) return;
+                                    if(customers.some(c => c.name===nn || (pp && phonesMatch(c.phone, pp)))) return alert("العميل ده موجود بالفعل (نفس الاسم أو رقم الموبايل)");
+                                    try {
+                                        await addDoc(collection(db,'artifacts',appId,'public','data','wholesale_customers'), {name:nn, phone:pp, createdAt:serverTimestamp()});
+                                        document.getElementById('c-name').value=''; document.getElementById('c-phone').value='';
+                                        alert("تم إضافة العميل بنجاح ✅");
+                                    } catch(err) { console.error(err); alert('حدث خطأ أثناء إضافة العميل'); }
                                 }} className="bg-emerald-600 text-white px-8 py-3 rounded-2xl font-black shadow-lg hover:bg-emerald-700 transition whitespace-nowrap">إضافة عميل</button>
                             </div>
                             
@@ -2969,7 +3073,7 @@
                                                     <Send size={14}/> إرسال للعميل
                                                 </button>
                                             </div>
-                                            <button onClick={()=>deleteDoc(doc(db,'artifacts',appId,'public','data','wholesale_customers',c.id))} className="absolute top-4 left-4 text-slate-200 hover:text-red-500 transition"><Trash2 size={16}/></button>
+                                            <button onClick={()=>{ if(window.confirm('متأكد إنك عايز تحذف العميل ده (وبياناته)؟ مش هينفع ترجعه تاني')) deleteDoc(doc(db,'artifacts',appId,'public','data','wholesale_customers',c.id)).catch(err=>{ console.error(err); alert('حدث خطأ أثناء الحذف'); }); }} className="absolute top-4 left-4 text-slate-200 hover:text-red-500 transition"><Trash2 size={16}/></button>
                                         </div>
                                     );
                                 })}
@@ -3287,7 +3391,7 @@
                             <input id="ex-a" type="number" className="w-full p-4 bg-slate-50 rounded-2xl mb-6 font-black text-center text-xl" placeholder="المبلغ المدفوع"/>
                             <button onClick={async()=>{
                                 const d=document.getElementById('ex-d').value, a=document.getElementById('ex-a').value;
-                                if(d&&a) { await addDoc(collection(db,'artifacts',appId,'public','data','expenses'), {description:d, amount:parseFloat(a), dateString:today, createdAt:serverTimestamp()}); alert("تم التسجيل ✅"); }
+                                if(d&&a&&parseFloat(a)>0) { await addDoc(collection(db,'artifacts',appId,'public','data','expenses'), {description:d, amount:parseFloat(a), dateString:today, createdAt:serverTimestamp()}); alert("تم التسجيل ✅"); }
                             }} className="w-full bg-red-600 text-white py-4 rounded-2xl font-black text-lg shadow-lg">حفظ المصروف</button>
                         </div>
                     )}
@@ -3366,7 +3470,7 @@
                                                                 >
                                                                     تصفير الحساب
                                                                 </button>
-                                                                <button onClick={()=>deleteDoc(doc(db,'artifacts',appId,'public','data','employees',emp.id))} className="text-slate-300 hover:text-red-500"><X size={16}/></button>
+                                                                <button onClick={()=>{ if(window.confirm('متأكد إنك عايز تحذف الموظف ده؟ مش هينفع ترجعه تاني')) deleteDoc(doc(db,'artifacts',appId,'public','data','employees',emp.id)).catch(err=>{ console.error(err); alert('حدث خطأ أثناء الحذف'); }); }} className="text-slate-300 hover:text-red-500"><X size={16}/></button>
                                                             </div>
                                                         </div>
                                                         <div className="space-y-1 text-xs">
@@ -3695,7 +3799,7 @@
                                     const isByMeter = document.getElementById('ni-bymeter').classList.contains('border-blue-500');
                                     const meterPriceVal = parseFloat(document.getElementById('ni-meter-price')?.value) || 0;
                                     
-                                    if(n&&p) {
+                                    if(n&&p&&parseFloat(p)>0) {
                                         await addDoc(collection(db,'artifacts',appId,'public', 'data', 'inventory'), {
                                             name:n, price:parseFloat(p), wholesalePrice: parseFloat(w) || parseFloat(p), stock: isNoStock || isP ? 0 : (parseInt(s)||0), isLaser:isL, isPrintingMaterial: isP || isNoStock,
                                             soldByMeter: isByMeter, meterUnitPrice: isByMeter ? (meterPriceVal || parseFloat(p)) : 0
@@ -4076,6 +4180,61 @@
                                         <div className="text-center text-slate-400 font-black py-10">لا توجد مصروفات مسجلة لهذه السنة</div>
                                     )}
                                 </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {showTempItem && (
+                        <div className="fixed inset-0 bg-black/80 flex items-center justify-center p-4 z-50">
+                            <div className="bg-white rounded-[2.5rem] p-6 w-full max-w-sm shadow-2xl relative max-h-[90vh] overflow-y-auto">
+                                <button onClick={()=>setShowTempItem(false)} className="absolute top-5 left-5 text-slate-400"><X size={22}/></button>
+                                <h3 className="font-black text-center mb-2 text-xl text-amber-700">صنف مؤقت</h3>
+                                <p className="text-xs text-slate-500 font-bold text-center mb-4">صنف مخصوص ليوم واحد، وبعدها يتمسح لوحده. من غير رقم سري.</p>
+                                {!tempEmployee ? (
+                                    <>
+                                        <div className="text-sm font-black text-slate-700 mb-3 text-center">مين الموظف اللي بينشئ الصنف؟</div>
+                                        <div className="space-y-2">
+                                            {employees.map(emp => (
+                                                <button key={emp.id} type="button" onClick={()=>setTempEmployee(emp.name)} className="w-full py-3 rounded-xl font-black bg-slate-50 hover:bg-amber-500 hover:text-white border border-slate-200 transition">{emp.name}</button>
+                                            ))}
+                                            {employees.length === 0 && <p className="text-center text-slate-400 font-bold text-sm">لا يوجد موظفين — أضفهم من الخزنة</p>}
+                                        </div>
+                                    </>
+                                ) : (
+                                    <>
+                                        <div className="text-center text-xs font-black text-amber-700 mb-3">بواسطة: {tempEmployee}</div>
+                                        <input className="w-full p-3 bg-slate-100 rounded-xl mb-3 font-black outline-none" placeholder="اسم الصنف المؤقت" value={tempName} onChange={e=>setTempName(e.target.value)} />
+                                        <input className="w-full p-3 bg-slate-100 rounded-xl mb-3 font-black outline-none text-center" type="number" placeholder="سعر القطاعي" value={tempPrice} onChange={e=>setTempPrice(e.target.value)} />
+                                        <input className="w-full p-3 bg-slate-100 rounded-xl mb-4 font-black outline-none text-center" type="number" placeholder="سعر الجملة (اختياري)" value={tempWholesale} onChange={e=>setTempWholesale(e.target.value)} />
+                                        <button type="button" onClick={async () => {
+                                            const n = tempName.trim();
+                                            const p = parseFloat(tempPrice);
+                                            if (!n || !p) return alert('اكتب الاسم والسعر');
+                                            const exp = new Date();
+                                            exp.setDate(exp.getDate() + 1);
+                                            const expiresAt = exp.toLocaleDateString('en-CA');
+                                            await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'inventory'), {
+                                                name: n,
+                                                price: p,
+                                                wholesalePrice: parseFloat(tempWholesale) || p,
+                                                stock: 0,
+                                                isLaser: false,
+                                                isPrintingMaterial: true,
+                                                isTemporary: true,
+                                                tempEmployee,
+                                                expiresAt,
+                                                createdAt: serverTimestamp()
+                                            });
+                                            setShowTempItem(false);
+                                            setTempEmployee('');
+                                            setTempName('');
+                                            setTempPrice('');
+                                            setTempWholesale('');
+                                            alert('تم إنشاء الصنف المؤقت بواسطة ' + tempEmployee + ' — هيتمسح تلقائي بعد يوم ✅');
+                                        }} className="w-full bg-amber-500 text-white py-4 rounded-xl font-black">حفظ الصنف المؤقت</button>
+                                        <button type="button" onClick={()=>setTempEmployee('')} className="w-full mt-2 bg-slate-100 text-slate-500 py-3 rounded-xl font-black">تغيير الموظف</button>
+                                    </>
+                                )}
                             </div>
                         </div>
                     )}
