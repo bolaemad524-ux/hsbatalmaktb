@@ -115,20 +115,8 @@
         const auth = getAuth(app);
         const db = getFirestore(app);
 
-        // فتح واتساب بشكل آمن للإيموشنات: على الكمبيوتر نستخدم واتساب ويب (UTF-8 سليم)،
-        // لأن بروتوكول whatsapp:// على ويندوز بيحوّل النص لترميز عربي قديم فتتحول الإيموشنات لعلامات استفهام
-        const openWhatsApp = (phone, message) => {
-            const text = (typeof message === 'string' && message.toWellFormed) ? message.toWellFormed() : String(message || '');
-            const num = String(phone || '').replace(/[^0-9]/g, '');
-            const isMobile = /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
-            const url = isMobile
-                ? `https://wa.me/${num}?text=${encodeURIComponent(text)}`
-                : `https://web.whatsapp.com/send?phone=${num}&text=${encodeURIComponent(text)}`;
-            window.open(url, '_blank');
-        };
-
         // النص التسويقي الثابت في أسفل الفواتير
-        const WA_FOOTER = `\nمتنساش تتابع صفحتنا على الفيس بوك ✨👇\nhttps://www.facebook.com/share/18o6vPJTep/\nوخلي المتجر معاك وتابع أقوى الخصومات 🔥😉👇\nhttps://bolaemad524-ux.github.io/matheronline-/?store=store_1773991337877 🔗`;
+        const WA_FOOTER = `\nمتنساش تتابع صفحتنا على الفيس بوك\nhttps://www.facebook.com/share/18o6vPJTep/\nوخلي المتجر معاك وتابع أقوى الخصومات\nhttps://bolaemad524-ux.github.io/matheronline-/?store=store_1773991337877`;
 
         // =====================================================================
         // === شاشة التقييم المخصصة للعملاء ===
@@ -411,7 +399,7 @@
 
             const buildWhatsAppMsg = () => {
                 let msg = `*كشف حساب - استوديو بولا عماد*\nالعميل: ${displayName}\nالهاتف: ${cphone}\n================\n\n`;
-                if (unpaid.length === 0) msg += `الحساب خالص ✅ مفيش مديونيات\n`;
+                if (unpaid.length === 0) msg += `الحساب خالص مفيش مديونيات\n`;
                 else {
                     unpaid.forEach(o => {
                         msg += `*فاتورة بتاريخ ${o.dateString}*\n`;
@@ -423,7 +411,7 @@
                 const allItems = [];
                 unpaid.forEach(o => { (o.items||[]).forEach(item => { allItems.push(`• ${item.name} × ${item.qty}`); }); });
                 if (allItems.length > 0) {
-                    msg += `\n\n================\n*📦 الأوردرات اللي هيستلمها الدليفري:*\n\n` + allItems.join('\n') + `\n================`;
+                    msg += `\n\n================\n*الأوردرات اللي هيستلمها الدليفري:*\n\n` + allItems.join('\n') + `\n================`;
                 }
                 msg += `\n\nمن فضلك راجع الكشف وأخبرنا بالاستلام.`;
                 return msg;
@@ -579,7 +567,7 @@
                         </div>
 
                         {totalDebt > 0 && (
-                            <button onClick={() => openWhatsApp('201285957035', buildWhatsAppMsg())}
+                            <button onClick={() => window.open(`https://wa.me/201285957035?text=${encodeURIComponent(buildWhatsAppMsg())}`, '_blank')}
                                 className="w-full bg-emerald-500 hover:bg-emerald-600 text-white py-4 rounded-2xl font-black text-lg flex items-center justify-center gap-2 shadow-xl transition mb-3">
                                 إرسال الكشف على واتساب الاستوديو
                             </button>
@@ -1121,15 +1109,15 @@
                 const currentUrl = window.location.href.split('?')[0];
                 const ratingLink = `${currentUrl}?view=rating&cname=${encodeURIComponent(cName||'')}&cphone=${encodeURIComponent(cPhone||'')}`;
                 const statementLink = `${currentUrl}?view=statement&phone=${encodeURIComponent(cPhone||'')}&cname=${encodeURIComponent(cName||'')}`;
-                const ratingMsg = `\nمتنساش تقيمنا من خلال الرابط ده عشان تساعدنا فى تطوير خدمتنا ✨👇\n${ratingLink}`;
+                const ratingMsg = `\nمتنساش تقيمنا من خلال الرابط ده عشان تساعدنا فى تطوير خدمتنا\n${ratingLink}`;
                 
                 if (isWholesaleCust) {
-                    return `\n\nتابع حسباتك واسعارك من مكتب بولا من خلال رابط البرنامج الخاص بيك ✨👇\n${statementLink}\n\n⚠️ *تنبيه هام:*\nبرجاء سداد قيمة الفاتورة خلال 3 أيام لضمان استمرار إصدار الفواتير الجديدة لحسابكم.\nشاكرين حسن تعاونكم وتفهمكم الدائم.` + ratingMsg; 
+                    return `\n\nتابع حسباتك واسعارك من مكتب بولا من خلال رابط البرنامج الخاص بيك\n${statementLink}\n\n*تنبيه هام:*\nبرجاء سداد قيمة الفاتورة خلال 3 أيام لضمان استمرار إصدار الفواتير الجديدة لحسابكم.\nشاكرين حسن تعاونكم وتفهمكم الدائم.` + ratingMsg; 
                 }
                 
                 const retailMarketingMsg = appSettings.retailFooterMsg 
                     ? `\n${appSettings.retailFooterMsg}` 
-                    : `\nمتنساش تتابع صفحتنا على الفيس بوك ✨👇\nhttps://www.facebook.com/share/18o6vPJTep/\nوخلي المتجر معاك وتابع أقوى الخصومات 🔥😉👇\nhttps://bolaemad524-ux.github.io/matheronline-/?store=store_1773991337877 🔗`;
+                    : `\nمتنساش تتابع صفحتنا على الفيس بوك\nhttps://www.facebook.com/share/18o6vPJTep/\nوخلي المتجر معاك وتابع أقوى الخصومات\nhttps://bolaemad524-ux.github.io/matheronline-/?store=store_1773991337877`;
                 return retailMarketingMsg + ratingMsg;
             };
 
@@ -1464,12 +1452,12 @@
                     const previousDebt = unpaidOrders.reduce((s,o)=>s+o.remaining,0);
                     
                     msg = `*كشف حساب وفاتورة استوديو بولا عماد*\nالعميل: ${customerName}\n================\n\n`;
-                    msg += `*📦 تفاصيل أوردر اليوم:*\n${currentItemsStr}\n`;
+                    msg += `*تفاصيل أوردر اليوم:*\n${currentItemsStr}\n`;
                     if (deliveryVal > 0) msg += `دليفري: ${deliveryVal} ج\n`;
                     msg += `الإجمالي: ${total} ج | المدفوع: ${paid} ج | *الباقي: ${currentRemaining} ج*\n\n`;
                     
                     if (unpaidOrders.length > 0) {
-                        msg += `================\n*🧾 الفواتير السابقة المعلقة:*\n\n`;
+                        msg += `================\n*الفواتير السابقة المعلقة:*\n\n`;
                         unpaidOrders.forEach((o) => {
                             msg += `*فاتورة (${o.dateString}):*\n`;
                             o.items.forEach(item => {
@@ -1498,7 +1486,7 @@
                     msg += `الإجمالي: ${total} ج\nالمدفوع: ${paid} ج\n*الباقي: ${currentRemaining} ج*\n${getCustomerFooter(customerName, customerPhone)}`;
                 }
                 
-                openWhatsApp(`2${customerPhone}`, msg);
+                window.open(`https://wa.me/2${customerPhone}?text=${encodeURIComponent(msg)}`, '_blank');
                 setIsWhatsAppSent(true); 
             };
 
@@ -1782,7 +1770,7 @@
                 let msg = `*كشف حساب تفصيلي*\nالعميل: ${activeCustomer.name}\n================\n\n`;
                 
                 if (unpaidOrders.length === 0) {
-                    msg += `ليس عليك أي مديونيات حالياً. حسابك خالص ✅\n\n`;
+                    msg += `ليس عليك أي مديونيات حالياً. حسابك خالص\n\n`;
                 } else {
                     unpaidOrders.forEach((o) => {
                         msg += `*فاتورة بتاريخ (${o.dateString})*\n`;
@@ -1806,7 +1794,7 @@
 
                 msg += getCustomerFooter(activeCustomer.name, activeCustomer.phone);
 
-                openWhatsApp(`2${activeCustomer.phone}`, msg);
+                window.open(`https://wa.me/2${activeCustomer.phone}?text=${encodeURIComponent(msg)}`, '_blank');
             };
 
             const executeDeleteOrder = async (employeeWhoDeleted) => {
@@ -2434,11 +2422,11 @@
                                         <p className="text-xs text-slate-400 font-bold mb-4">الرسالة دي بتتبعت في آخر فاتورة واتساب لعملاء القطاعي</p>
                                         <textarea 
                                             className="w-full p-4 bg-slate-50 rounded-2xl font-bold text-sm text-slate-700 border-2 border-slate-200 focus:border-indigo-400 outline-none h-48 resize-none leading-relaxed"
-                                            value={retailFooterDraft !== null ? retailFooterDraft : (appSettings.retailFooterMsg || "متنساش تتابع صفحتنا على الفيس بوك ✨👇\nhttps://www.facebook.com/share/18o6vPJTep/\nوخلي المتجر معاك وتابع أقوى الخصومات 🔥😉👇\nhttps://bolaemad524-ux.github.io/matheronline-/?store=store_1773991337877 🔗")}
+                                            value={retailFooterDraft !== null ? retailFooterDraft : (appSettings.retailFooterMsg || "متنساش تتابع صفحتنا على الفيس بوك\nhttps://www.facebook.com/share/18o6vPJTep/\nوخلي المتجر معاك وتابع أقوى الخصومات\nhttps://bolaemad524-ux.github.io/matheronline-/?store=store_1773991337877")}
                                             onChange={e => setRetailFooterDraft(e.target.value)}
                                             onFocus={() => {
                                                 if (retailFooterDraft === null) {
-                                                    setRetailFooterDraft(appSettings.retailFooterMsg || "متنساش تتابع صفحتنا على الفيس بوك ✨👇\nhttps://www.facebook.com/share/18o6vPJTep/\nوخلي المتجر معاك وتابع أقوى الخصومات 🔥😉👇\nhttps://bolaemad524-ux.github.io/matheronline-/?store=store_1773991337877 🔗");
+                                                    setRetailFooterDraft(appSettings.retailFooterMsg || "متنساش تتابع صفحتنا على الفيس بوك\nhttps://www.facebook.com/share/18o6vPJTep/\nوخلي المتجر معاك وتابع أقوى الخصومات\nhttps://bolaemad524-ux.github.io/matheronline-/?store=store_1773991337877");
                                                 }
                                             }}
                                         />
@@ -2767,7 +2755,7 @@
                                             <button onClick={() => {
                                                 const itemsStr = order.items.map(i=>`• ${i.name} (x${i.qty}) = ${i.qty*i.currentPrice} ج`).join('\n');
                                                 const msg = `*فاتورة استوديو بولا عماد*\nالعميل: ${order.customerName}\n--------------\n${itemsStr}\n--------------\nالإجمالي: ${order.total} ج\nالمدفوع: ${order.paid} ج\n*الباقي: ${order.remaining} ج*\n${getCustomerFooter(order.customerName, order.customerPhone)}`;
-                                                openWhatsApp(`2${order.customerPhone || ''}`, msg);
+                                                window.open(`https://wa.me/2${order.customerPhone || ''}?text=${encodeURIComponent(msg)}`, '_blank');
                                             }} className="bg-emerald-50 text-emerald-600 py-3 rounded-xl font-black text-xs flex items-center justify-center gap-2 border border-emerald-100">
                                                 <Send size={14}/> واتساب
                                             </button>
@@ -2797,8 +2785,8 @@
                                                     onClick={() => {
                                                         const base = window.location.href.split('?')[0];
                                                         const ratingLink = `${base}?view=rating&cname=${encodeURIComponent(order.customerName||'')}&cphone=${encodeURIComponent(order.customerPhone||'')}`;
-                                                        const msg = `متنساش تقيمنا من خلال الرابط ده عشان تساعدنا فى تطوير خدمتنا ✨👇\n${ratingLink}`;
-                                                        openWhatsApp(`2${order.customerPhone}`, msg);
+                                                        const msg = `متنساش تقيمنا من خلال الرابط ده عشان تساعدنا فى تطوير خدمتنا\n${ratingLink}`;
+                                                        window.open(`https://wa.me/2${order.customerPhone}?text=${encodeURIComponent(msg)}`, '_blank');
                                                     }}
                                                     className="bg-amber-50 text-amber-700 py-3 rounded-xl font-black text-xs flex items-center justify-center gap-1 border border-amber-100 hover:bg-amber-100 transition"
                                                 >
@@ -3077,8 +3065,8 @@
                                                         if (!c.phone) return alert('مفيش رقم للعميل');
                                                         const base = window.location.href.split('?')[0];
                                                         const link = `${base}?view=statement&phone=${encodeURIComponent(c.phone || '')}&cname=${encodeURIComponent(c.name || '')}`;
-                                                        const msg = `أهلاً بك أ. ${c.name} ✨\n\nده *رابط كشف حسابك الخاص* في استوديو بولا عماد:\n${link}\n\n📌 *من خلال الرابط هتقدر:*\n• تشوف كل مشترياتك خلال السنة\n• تعرف المديونية الحالية إن وجدت\n• تشوف تفاصيل كل فاتورة\n• تبعت تأكيد الاستلام للاستوديو مباشرة من جوه الرابط\n\nاضغط على الرابط وافتحه من متصفح الموبايل.`;
-                                                        openWhatsApp(`2${c.phone}`, msg);
+                                                        const msg = `أهلاً بك أ. ${c.name}\n\nده *رابط كشف حسابك الخاص* في استوديو بولا عماد:\n${link}\n\n*من خلال الرابط هتقدر:*\n• تشوف كل مشترياتك خلال السنة\n• تعرف المديونية الحالية إن وجدت\n• تشوف تفاصيل كل فاتورة\n• تبعت تأكيد الاستلام للاستوديو مباشرة من جوه الرابط\n\nاضغط على الرابط وافتحه من متصفح الموبايل.`;
+                                                        window.open(`https://wa.me/2${c.phone}?text=${encodeURIComponent(msg)}`, '_blank');
                                                     }}
                                                     className="bg-emerald-500 text-white py-3 rounded-xl font-black text-xs flex items-center justify-center gap-1 hover:bg-emerald-600 transition"
                                                 >
@@ -3309,7 +3297,7 @@
                                                 </div>
                                                 <button 
                                                     onClick={() => {
-                                                        openWhatsApp(`2${c.phone}`, promoMessage);
+                                                        window.open(`https://wa.me/2${c.phone}?text=${encodeURIComponent(promoMessage)}`, '_blank');
                                                     }}
                                                     className="w-full sm:w-auto bg-emerald-500 hover:bg-emerald-600 text-white px-5 py-3 rounded-xl font-black text-sm flex items-center justify-center gap-2 transition shadow-md"
                                                 >
@@ -3383,7 +3371,7 @@
                                                     <button onClick={() => {
                                                         const itemsStr = order.items.map(i=>`• ${i.name} (x${i.qty}) = ${i.qty*i.currentPrice} ج`).join('\n');
                                                         const msg = `*استوديو بولا عماد*\nأهلاً بك أ. ${order.customerName}\nبرجاء التفضل باستلام الأوردر الخاص بك وتسديد المديونية في أقرب وقت.\n\n*تفاصيل الأوردر:*\n${itemsStr}\n\n*المبلغ المتبقي لحساب الاستوديو:* ${order.remaining} ج\n${getCustomerFooter(order.customerName, order.customerPhone)}`;
-                                                        openWhatsApp(`2${order.customerPhone || ''}`, msg);
+                                                        window.open(`https://wa.me/2${order.customerPhone || ''}?text=${encodeURIComponent(msg)}`, '_blank');
                                                     }} className="w-full md:w-auto bg-emerald-500 hover:bg-emerald-600 text-white px-6 py-3 rounded-xl font-black text-sm flex items-center justify-center gap-2 transition shadow-md whitespace-nowrap">
                                                         <Send size={18}/> إرسال رسالة تذكير
                                                     </button>
@@ -3519,7 +3507,7 @@
                                                         onClick={() => {
                                                             if(!phone) return alert("مفيش رقم واتساب مسجل لهذا العميل");
                                                             const msg = "مكتب بولا عماد معاك يا فندم .. فى تجربه التقييم ممكن اعرف سبب الغاء الاوردر الخاص بك ؟";
-                                                            openWhatsApp(`2${phone}`, msg);
+                                                            window.open(`https://wa.me/2${phone}?text=${encodeURIComponent(msg)}`, '_blank');
                                                         }}
                                                         className={`p-2.5 rounded-xl transition shadow-sm flex items-center justify-center ${phone ? 'bg-emerald-500 hover:bg-emerald-600 text-white' : 'bg-slate-200 text-slate-400'}`}
                                                         title={phone ? "واتساب" : "لا يوجد رقم"}
