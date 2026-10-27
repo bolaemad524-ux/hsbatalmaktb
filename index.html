@@ -114,6 +114,81 @@
         const app = initializeApp(firebaseConfig);
         const auth = getAuth(app);
         const db = getFirestore(app);
+        // =========================================================================
+        // ربط أسعار العملاء مع المتجر الإلكتروني
+        // =========================================================================
+        const storeFirebaseConfig = {
+          apiKey: "AIzaSyAzildDtyvUV3eNBWkin8wXQsMaEwFoeDs",
+          authDomain: "madgeralktrony.firebaseapp.com",
+          projectId: "madgeralktrony",
+          storageBucket: "madgeralktrony.firebasestorage.app",
+          messagingSenderId: "1032925262144",
+          appId: "1:1032925262144:web:796572d54819804422caa5"
+        };
+        const STORE_ID = "store_1773991337877";
+        let storeApp = null;
+        let storeDb = null;
+        let storeAuth = null;
+        try {
+          storeApp = initializeApp(storeFirebaseConfig, 'storeSync');
+          storeDb = getFirestore(storeApp);
+          storeAuth = getAuth(storeApp);
+          // تسجيل دخول مجهول عشان نقدر نكتب في المتجر لو القواعد تسمح
+          signInAnonymously(storeAuth).catch(e => console.warn('Store anon auth failed', e));
+        } catch (e) { console.warn('Store Firebase init failed', e); }
+
+        async function syncCustomerPriceToStore(itemName, customerPrice) {
+          if (!storeDb || !itemName || customerPrice == null) return;
+          try {
+            const productsRef = collection(storeDb, 'stores', STORE_ID, 'products');
+            const snap = await getDocs(productsRef);
+            const batch = writeBatch(storeDb);
+            let updated = 0;
+            const norm = (s) => (s || '').toString().trim().toLowerCase().replace(/\s+/g, ' ');
+            const target = norm(itemName);
+            snap.forEach(docSnap => {
+              const data = docSnap.data();
+              if (norm(data.name) === target) {
+                batch.update(docSnap.ref, { price: Number(customerPrice) });
+                updated++;
+              }
+            });
+            if (updated > 0) {
+              await batch.commit();
+              console.log('Synced price to store for', itemName, '->', customerPrice, 'updated', updated);
+            }
+          } catch (e) {
+            console.error('Failed to sync price to store:', e);
+          }
+        }
+
+        async function syncAllCustomerPricesToStore(items) {
+          if (!storeDb || !items || !items.length) return {updated:0, matched:0};
+          try {
+            const productsRef = collection(storeDb, 'stores', STORE_ID, 'products');
+            const snap = await getDocs(productsRef);
+            const products = snap.docs.map(d => ({id: d.id, ref: d.ref, ...d.data()}));
+            const norm = (s) => (s || '').toString().trim().toLowerCase().replace(/\s+/g, ' ');
+            const batch = writeBatch(storeDb);
+            let updated = 0;
+            for (const item of items) {
+              const customerPrice = item.price; // سعر القطاعي للعملاء في المتجر
+              if (customerPrice == null) continue;
+              const target = norm(item.name);
+              const matches = products.filter(p => norm(p.name) === target);
+              matches.forEach(p => {
+                batch.update(p.ref, { price: Number(customerPrice) });
+                updated++;
+              });
+            }
+            if (updated > 0) await batch.commit();
+            return {updated, totalProducts: products.length};
+          } catch (e) {
+            console.error(e);
+            return {error: e.message};
+          }
+        }
+
 
         // النص التسويقي الثابت في أسفل الفواتير
         const WA_FOOTER = `\nمتنساش تتابع صفحتنا على الفيس بوك\nhttps://www.facebook.com/share/18o6vPJTep/\nوخلي المتجر معاك وتابع أقوى الخصومات\nhttps://bolaemad524-ux.github.io/matheronline-/?store=store_1773991337877`;
@@ -2870,6 +2945,14 @@
                                     }} className="flex-1 md:flex-none bg-amber-500 hover:bg-amber-600 text-white px-6 py-3 rounded-xl font-black text-sm flex items-center justify-center gap-2 transition shadow-md">
                                         صنف مؤقت
                                     </button>
+                                    <button type="button" onClick={async () => {
+                                        if (!window.confirm('هل تريد مزامنة كل أسعار القطاعي مع المتجر الإلكتروني؟\nسيتم تحديث سعر البيع في المتجر لكل صنف له نفس الاسم.')) return;
+                                        const res = await syncAllCustomerPricesToStore(items);
+                                        if (res.error) alert('حدث خطأ: ' + res.error);
+                                        else alert(`تمت المزامنة ✅\nتم تحديث ${res.updated} سعر في المتجر`);
+                                    }} className="flex-1 md:flex-none bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-3 rounded-xl font-black text-sm flex items-center justify-center gap-2 transition shadow-md">
+                                        <RefreshCcw size={18}/> مزامنة المتجر
+                                    </button>
                                 </div>
                             </div>
 
@@ -3800,10 +3883,13 @@
                                     const meterPriceVal = parseFloat(document.getElementById('ni-meter-price')?.value) || 0;
                                     
                                     if(n&&p&&parseFloat(p)>0) {
-                                        await addDoc(collection(db,'artifacts',appId,'public', 'data', 'inventory'), {
+                                        const newItem = {
                                             name:n, price:parseFloat(p), wholesalePrice: parseFloat(w) || parseFloat(p), stock: isNoStock || isP ? 0 : (parseInt(s)||0), isLaser:isL, isPrintingMaterial: isP || isNoStock,
                                             soldByMeter: isByMeter, meterUnitPrice: isByMeter ? (meterPriceVal || parseFloat(p)) : 0
-                                        });
+                                        };
+                                        await addDoc(collection(db,'artifacts',appId,'public', 'data', 'inventory'), newItem);
+                                        // مزامنة سعر العميل مع المتجر
+                                        syncCustomerPriceToStore(newItem.name, newItem.price);
                                         setShowAddItem(false); alert("تم إضافة الصنف بنجاح ✅");
                                     } else { alert("يرجى إدخال الاسم والسعر على الأقل"); }
                                 }} className="w-full bg-slate-900 text-white py-4 rounded-2xl font-black text-lg shadow-xl hover:bg-slate-800 transition">حفظ الصنف</button>
@@ -3874,6 +3960,8 @@
                                                 if (!isNaN(val)) updates.stock = val;
                                             }
                                             await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'inventory', editingStockItem.id), updates);
+                                            // مزامنة سعر العميل مع المتجر الإلكتروني
+                                            syncCustomerPriceToStore(updates.name, updates.price);
                                             setEditingStockItem(null);
                                         }} className="flex-1 bg-emerald-600 text-white py-3 rounded-xl font-black shadow-lg hover:bg-emerald-700 transition">حفظ</button>
                                     <button onClick={() => setEditingStockItem(null)} className="flex-1 bg-slate-200 text-slate-500 py-3 rounded-xl font-black hover:bg-slate-300 transition">إلغاء</button>
@@ -4271,3 +4359,4 @@
     </script>
 </body>
 </html>
+
