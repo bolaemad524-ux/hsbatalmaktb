@@ -689,6 +689,7 @@
         // --- MAIN APP COMPONENT ---
         const App = () => {
           const [user, setUser] = useState(null);
+          const [dbReady, setDbReady] = useState(false);
           const [currentView, setCurrentView] = useState(() => {
               try { const v = new URLSearchParams(window.location.search).get('view'); return (v === 'rating' || v === 'statement') ? v : 'landing'; } catch (e) { return 'landing'; }
           });
@@ -736,7 +737,9 @@
             const settingsUnsub = onSnapshot(doc(db, 'artifacts', appId, 'public', 'data', 'app_settings', 'general'), (docSnap) => {
                 if (docSnap.exists()) {
                     setAppSettings(prev => ({ ...prev, ...docSnap.data() }));
+                    setDbReady(true);
                 } else {
+                    setDbReady(true);
                     setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'app_settings', 'general'), { 
                         laser: '941997', office: '0128', vaultPin: '3316', meterPrice: 250, commissionRate: 1 
                     }, { merge: true });
@@ -770,7 +773,7 @@
             else { alert("عذراً، الرقم السري غير صحيح"); setPinInput(''); }
           };
 
-          if (!user) return (
+          if (!user || !dbReady) return (
             <div className="min-h-screen flex flex-col items-center justify-center bg-slate-950 text-white" dir="rtl">
               <div className="w-24 h-24 rounded-full border-4 border-blue-500 border-t-transparent animate-spin mb-6"/>
               <div className="text-2xl font-black mb-2"><span className="text-slate-200">BOLA</span> <span className="text-blue-500">EMAD</span></div>
@@ -4377,5 +4380,6 @@
     </script>
 </body>
 </html>
+
 
 
