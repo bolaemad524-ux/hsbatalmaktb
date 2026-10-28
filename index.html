@@ -303,6 +303,84 @@
             _purgingTemp = false;
         };
 
+
+        // =====================================================================
+        // === تحميل أسعار الجملة PDF (من المخزن) ===
+        // =====================================================================
+        const loadScriptOnce = (src) => new Promise((resolve, reject) => {
+            if (document.querySelector('script[data-src="' + src + '"]')) {
+                const ex = document.querySelector('script[data-src="' + src + '"]');
+                if (ex.dataset.loaded === '1') return resolve();
+                ex.addEventListener('load', () => resolve());
+                ex.addEventListener('error', () => reject(new Error('load failed')));
+                return;
+            }
+            const sc = document.createElement('script');
+            sc.src = src; sc.dataset.src = src;
+            sc.onload = () => { sc.dataset.loaded = '1'; resolve(); };
+            sc.onerror = () => reject(new Error('load failed'));
+            document.head.appendChild(sc);
+        });
+
+        const downloadWholesalePricesPDF = async (itemsList) => {
+            const list = sortInventory((itemsList || []).filter(i => i && i.name && !i.isTemporary))
+                .map(i => ({ name: i.name, price: Number(i.wholesalePrice || i.price) || 0 }));
+            if (!list.length) { alert('لا توجد أصناف لتحميلها'); return; }
+            const dateStr = new Date().toLocaleDateString('en-CA');
+            const rows = list.map((it, idx) => `
+                <tr>
+                    <td style="padding:8px 6px;border:1px solid #cbd5e1;text-align:center;width:44px;color:#64748b;">${idx + 1}</td>
+                    <td style="padding:8px 10px;border:1px solid #cbd5e1;text-align:right;font-weight:700;">${escHtml(it.name)}</td>
+                    <td style="padding:8px 10px;border:1px solid #cbd5e1;text-align:center;width:110px;font-weight:900;color:#b45309;">${it.price} ج</td>
+                </tr>`).join('');
+            const inner = `
+                <div style="text-align:center;margin-bottom:16px;border-bottom:3px solid #1e293b;padding-bottom:12px;">
+                    <div style="font-size:24px;font-weight:900;color:#0f172a;">استوديو بولا عماد</div>
+                    <div style="font-size:16px;font-weight:800;color:#b45309;margin-top:4px;">قائمة أسعار الجملة</div>
+                    <div style="font-size:12px;color:#64748b;margin-top:4px;">بتاريخ: ${dateStr}</div>
+                </div>
+                <table style="width:100%;border-collapse:collapse;font-size:13px;">
+                    <thead>
+                        <tr style="background:#1e293b;color:#fff;">
+                            <th style="padding:9px 6px;border:1px solid #1e293b;">م</th>
+                            <th style="padding:9px 10px;border:1px solid #1e293b;text-align:right;">الصنف</th>
+                            <th style="padding:9px 10px;border:1px solid #1e293b;">سعر الجملة</th>
+                        </tr>
+                    </thead>
+                    <tbody>${rows}</tbody>
+                </table>
+                <div style="text-align:center;margin-top:14px;font-size:11px;color:#94a3b8;">الأسعار قابلة للتغيير دون إشعار مسبق</div>`;
+
+            const wrap = document.createElement('div');
+            wrap.dir = 'rtl';
+            wrap.style.cssText = 'position:fixed;top:0;left:0;width:794px;background:#fff;color:#0f172a;padding:24px;z-index:-1;font-family:system-ui,-apple-system,"Segoe UI",Tahoma,Arial,sans-serif;';
+            wrap.innerHTML = inner;
+            document.body.appendChild(wrap);
+            try {
+                await loadScriptOnce('https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js');
+                await window.html2pdf().set({
+                    margin: [10, 8, 10, 8],
+                    filename: `اسعار-الجملة-${dateStr}.pdf`,
+                    image: { type: 'jpeg', quality: 0.98 },
+                    html2canvas: { scale: 2, useCORS: true, backgroundColor: '#ffffff', scrollY: 0 },
+                    jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
+                    pagebreak: { mode: ['css', 'legacy'], avoid: 'tr' }
+                }).from(wrap).save();
+            } catch (e) {
+                console.error(e);
+                // بديل: نافذة طباعة (احفظ كـ PDF)
+                const w = window.open('', '_blank');
+                if (!w) { alert('تعذر تحميل الـ PDF. تأكد من الاتصال بالإنترنت أو اسمح بالنوافذ المنبثقة.'); }
+                else {
+                    w.document.write('<!DOCTYPE html><html lang="ar" dir="rtl"><head><meta charset="UTF-8"><title>أسعار الجملة</title></head><body style="font-family:system-ui,Tahoma,Arial,sans-serif;padding:16px;">' + inner + '</body></html>');
+                    w.document.close();
+                    setTimeout(() => { w.focus(); w.print(); }, 400);
+                }
+            } finally {
+                wrap.remove();
+            }
+        };
+
         const RatingSystem = ({ db, appId }) => {
             const urlParams = new URLSearchParams(window.location.search);
             const cname = urlParams.get('cname') || '';
@@ -427,7 +505,7 @@
                         return false;
                     }).sort((a,b) => (b.createdAt?.seconds||0) - (a.createdAt?.seconds||0));
                     setOrders(filtered);
-                });
+                }, err => { console.error('orders error', err); setLoading(false); });
                 const unsubItems = onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', 'inventory'), snap => {
                     setItems(sortInventory(snap.docs.map(d => ({id: d.id, ...d.data()}))));
                 });
@@ -443,7 +521,7 @@
                         if (!found.clientPin) setNeedSetPin(true);
                     }
                     setLoading(false);
-                });
+                }, err => { console.error('customers error', err); setLoading(false); });
                 return () => { unsubOrders(); unsubItems(); unsubCust(); };
             }, [cphone, cname]);
 
@@ -577,7 +655,7 @@
                             <button onClick={()=>setTab('statement')} className={`flex-1 py-3 rounded-xl font-black text-sm transition ${tab==='statement'?'bg-emerald-600 text-white':'bg-slate-800 text-slate-400'}`}>كشف الحساب</button>
                             <button onClick={()=>setTab('prices')} className={`flex-1 py-3 rounded-xl font-black text-sm transition ${tab==='prices'?'bg-amber-500 text-white':'bg-slate-800 text-slate-400'}`}>أسعارك الخاصة بالمكتب</button>
                             <button onClick={()=>{
-                                const base = window.location.href.split('?')[0];
+                                const base = window.location.href.split('#')[0].split('?')[0];
                                 window.location.href = base + '?view=rating&cname=' + encodeURIComponent(displayName||'') + '&cphone=' + encodeURIComponent(cphone||'');
                             }} className="px-3 py-3 rounded-xl bg-amber-500/20 text-amber-400 hover:bg-amber-500 hover:text-white transition font-black text-xs" title="التقييم">⭐ التقييم</button>
                             <button onClick={()=>{setShowChangePin(true); setNewPin(''); setConfirmPin('');}} className="px-3 py-3 rounded-xl bg-slate-800 text-slate-400 hover:text-white transition" title="تغيير الرقم السري">🔑</button>
@@ -773,7 +851,7 @@
             else { alert("عذراً، الرقم السري غير صحيح"); setPinInput(''); }
           };
 
-          if (!user || !dbReady) return (
+          if (!user || (!dbReady && !isPublicView)) return (
             <div className="min-h-screen flex flex-col items-center justify-center bg-slate-950 text-white" dir="rtl">
               <div className="w-24 h-24 rounded-full border-4 border-blue-500 border-t-transparent animate-spin mb-6"/>
               <div className="text-2xl font-black mb-2"><span className="text-slate-200">BOLA</span> <span className="text-blue-500">EMAD</span></div>
@@ -1202,7 +1280,7 @@
 
             const getCustomerFooter = (cName, cPhone) => {
                 const isWholesaleCust = customers.some(c => (cName && c.name === cName) || phonesMatch(c.phone, cPhone));
-                const currentUrl = window.location.href.split('?')[0];
+                const currentUrl = window.location.href.split('#')[0].split('?')[0];
                 const ratingLink = `${currentUrl}?view=rating&cname=${encodeURIComponent(cName||'')}&cphone=${encodeURIComponent(cPhone||'')}`;
                 const statementLink = `${currentUrl}?view=statement&phone=${encodeURIComponent(cPhone||'')}&cname=${encodeURIComponent(cName||'')}`;
                 const ratingMsg = `\nمتنساش تقيمنا من خلال الرابط ده عشان تساعدنا فى تطوير خدمتنا\n${ratingLink}`;
@@ -2879,7 +2957,7 @@
                                             {!customers.some(c => c.name === order.customerName || c.phone === order.customerPhone) && order.customerPhone && (
                                                 <button 
                                                     onClick={() => {
-                                                        const base = window.location.href.split('?')[0];
+                                                        const base = window.location.href.split('#')[0].split('?')[0];
                                                         const ratingLink = `${base}?view=rating&cname=${encodeURIComponent(order.customerName||'')}&cphone=${encodeURIComponent(order.customerPhone||'')}`;
                                                         const msg = `متنساش تقيمنا من خلال الرابط ده عشان تساعدنا فى تطوير خدمتنا\n${ratingLink}`;
                                                         window.open(`https://wa.me/2${order.customerPhone}?text=${encodeURIComponent(msg)}`, '_blank');
@@ -2965,6 +3043,9 @@
                                         setShowTempItem(true);
                                     }} className="flex-1 md:flex-none bg-amber-500 hover:bg-amber-600 text-white px-6 py-3 rounded-xl font-black text-sm flex items-center justify-center gap-2 transition shadow-md">
                                         صنف مؤقت
+                                    </button>
+                                    <button type="button" onClick={() => downloadWholesalePricesPDF(items)} className="flex-1 md:flex-none bg-rose-600 hover:bg-rose-700 text-white px-6 py-3 rounded-xl font-black text-sm flex items-center justify-center gap-2 transition shadow-md" title="تحميل أسعار الجملة PDF">
+                                        <Download size={18}/> أسعار الجملة PDF
                                     </button>
                                     <button type="button" onClick={async () => {
                                         if (!window.confirm('هل تريد مزامنة كل أسعار القطاعي مع المتجر الإلكتروني؟\nسيتم تحديث سعر البيع في المتجر لكل صنف له نفس الاسم.')) return;
@@ -3152,7 +3233,7 @@
                                             <div className="grid grid-cols-2 gap-2 mt-2">
                                                 <button 
                                                     onClick={() => {
-                                                        const base = window.location.href.split('?')[0];
+                                                        const base = window.location.href.split('#')[0].split('?')[0];
                                                         const link = `${base}?view=statement&phone=${encodeURIComponent(c.phone || '')}&cname=${encodeURIComponent(c.name || '')}`;
                                                         navigator.clipboard.writeText(link).then(() => {
                                                             alert('تم نسخ الرابط ✅');
@@ -3167,7 +3248,7 @@
                                                 <button 
                                                     onClick={() => {
                                                         if (!c.phone) return alert('مفيش رقم للعميل');
-                                                        const base = window.location.href.split('?')[0];
+                                                        const base = window.location.href.split('#')[0].split('?')[0];
                                                         const link = `${base}?view=statement&phone=${encodeURIComponent(c.phone || '')}&cname=${encodeURIComponent(c.name || '')}`;
                                                         const msg = `أهلاً بك أ. ${c.name}\n\nده *رابط كشف حسابك الخاص* في استوديو بولا عماد:\n${link}\n\n*من خلال الرابط هتقدر:*\n• تشوف كل مشترياتك خلال السنة\n• تعرف المديونية الحالية إن وجدت\n• تشوف تفاصيل كل فاتورة\n• تبعت تأكيد الاستلام للاستوديو مباشرة من جوه الرابط\n\nاضغط على الرابط وافتحه من متصفح الموبايل.`;
                                                         window.open(`https://wa.me/2${c.phone}?text=${encodeURIComponent(msg)}`, '_blank');
