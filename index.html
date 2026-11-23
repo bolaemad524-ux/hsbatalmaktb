@@ -772,23 +772,26 @@
               try { const v = new URLSearchParams(window.location.search).get('view'); return (v === 'rating' || v === 'statement') ? v : 'landing'; } catch (e) { return 'landing'; }
           });
           const isPublicView = currentView === 'rating' || currentView === 'statement';
-          const [authView, setAuthView] = useState(null); 
-          const [appSettings, setAppSettings] = useState({ 
-              laser: '941997', 
+          const [authView, setAuthView] = useState(null);
+          const [paulaClicks, setPaulaClicks] = useState(0);
+          const [showIndoorIcon, setShowIndoorIcon] = useState(false);
+          const [appSettings, setAppSettings] = useState({
+              laser: '941997',
+              indoor: '311200',
               office: '0128',
-              vaultPin: '3316', 
+              vaultPin: '3316',
               meterPrice: 250,
-              commissionRate: 1 
+              commissionRate: 1
           });
           const [pinInput, setPinInput] = useState('');
-          
+
           const [items, setItems] = useState([]);
           const [orders, setOrders] = useState([]);
           const [expenses, setExpenses] = useState([]);
-          const [customers, setCustomers] = useState([]); 
-          const [employees, setEmployees] = useState([]); 
+          const [customers, setCustomers] = useState([]);
+          const [employees, setEmployees] = useState([]);
           const [laserBills, setLaserBills] = useState([]);
-          const [debtPayments, setDebtPayments] = useState([]); 
+          const [indoorBills, setIndoorBills] = useState([]);
           const [deletedLogs, setDeletedLogs] = useState([]); 
           const [ratings, setRatings] = useState([]); 
 
@@ -818,8 +821,8 @@
                     setDbReady(true);
                 } else {
                     setDbReady(true);
-                    setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'app_settings', 'general'), { 
-                        laser: '941997', office: '0128', vaultPin: '3316', meterPrice: 250, commissionRate: 1 
+                    setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'app_settings', 'general'), {
+                        laser: '941997', indoor: '311200', office: '0128', vaultPin: '3316', meterPrice: 250, commissionRate: 1
                     }, { merge: true });
                 }
             });
@@ -839,6 +842,7 @@
               onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', 'wholesale_customers'), s => setCustomers(s.docs.map(d=>({id:d.id, ...d.data()})))),
               onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', 'employees'), s => setEmployees(s.docs.map(d=>({id:d.id, ...d.data()})))), 
               onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', 'laser_bills'), s => setLaserBills(s.docs.map(d=>({id:d.id, ...d.data()})).sort((a,b)=>(b.createdAt?.seconds||0)-(a.createdAt?.seconds||0)))),
+              onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', 'indoor_bills'), s => setIndoorBills(s.docs.map(d=>({id:d.id, ...d.data()})).sort((a,b)=>(b.createdAt?.seconds||0)-(a.createdAt?.seconds||0)))),
               onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', 'debt_payments'), s => setDebtPayments(s.docs.map(d=>({id:d.id, ...d.data()})))),
               onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', 'deleted_logs'), s => setDeletedLogs(s.docs.map(d=>({id:d.id, ...d.data()})).sort((a,b)=>(b.deletedAt?.seconds||0)-(a.deletedAt?.seconds||0)))), 
               onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', 'ratings'), s => setRatings(s.docs.map(d=>({id:d.id, ...d.data()})).sort((a,b)=>(b.createdAt?.seconds||0)-(a.createdAt?.seconds||0)))), 
@@ -847,7 +851,8 @@
           }, [user, isPublicView]);
 
           const handleLogin = (target) => {
-            if (String(pinInput) === String(appSettings[target])) { setCurrentView(target); setAuthView(null); setPinInput(''); }
+            const expectedPin = target === 'indoor' ? (appSettings.indoor || '311200') : appSettings[target];
+            if (String(pinInput) === String(expectedPin)) { setCurrentView(target); setAuthView(null); setPinInput(''); }
             else { alert("عذراً، الرقم السري غير صحيح"); setPinInput(''); }
           };
 
@@ -873,21 +878,41 @@
                 {authView && (
                     <div className="fixed inset-0 bg-black/90 z-[100] flex items-center justify-center p-4">
                         <div className="bg-white rounded-[2rem] p-10 max-w-sm w-full text-center relative shadow-2xl">
-                            <button onClick={() => setAuthView(null)} className="absolute top-4 left-4 text-slate-400"><X/></button>
+                            <button onClick={() => { setAuthView(null); setPinInput(''); }} className="absolute top-4 left-4 text-slate-400"><X/></button>
                             <div className="w-16 h-16 bg-indigo-50 rounded-full flex items-center justify-center mx-auto mb-4 text-indigo-600"><Lock size={28}/></div>
-                            <h3 className="text-xl font-black text-slate-800 mb-4">{authView === 'laser' ? 'دخول الليزر' : 'دخول المكتب'}</h3>
-                            <input type="password" autoFocus className="w-full bg-slate-100 p-3 text-center text-3xl font-black rounded-xl mb-4 border-2 border-transparent focus:border-indigo-500 outline-none" value={pinInput} onChange={e => setPinInput(e.target.value)} placeholder="****"/>
+                            <h3 className="text-xl font-black text-slate-800 mb-4">{authView === 'laser' ? 'دخول الليزر' : authView === 'indoor' ? 'دخول طباعة ان دور' : 'دخول المكتب'}</h3>
+                            <input type="password" autoFocus className="w-full bg-slate-100 p-3 text-center text-3xl font-black rounded-xl mb-4 border-2 border-transparent focus:border-indigo-500 outline-none" value={pinInput} onChange={e => setPinInput(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') handleLogin(authView); }} placeholder="****"/>
                             <button onClick={() => handleLogin(authView)} className="w-full bg-indigo-600 text-white py-4 rounded-xl font-black">دخول</button>
                         </div>
                     </div>
                 )}
-                <h1 className="text-4xl md:text-6xl font-black text-white mb-2 tracking-tighter">PAULA SYSTEM</h1>
+                <h1 className="text-4xl md:text-6xl font-black text-white mb-2 tracking-tighter">
+                    <span
+                        onClick={() => {
+                            setPaulaClicks(prev => {
+                                const next = prev + 1;
+                                if (next >= 3) {
+                                    setShowIndoorIcon(true);
+                                    return 0;
+                                }
+                                return next;
+                            });
+                        }}
+                        className="cursor-pointer select-none"
+                    >PAULA</span> SYSTEM
+                </h1>
                 <p className="text-indigo-400 font-bold mb-12 tracking-widest text-xs uppercase">Premium Studio Edition V23.2</p>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 w-full max-w-3xl">
+                <div className={`grid grid-cols-1 ${showIndoorIcon ? 'md:grid-cols-3 max-w-5xl' : 'md:grid-cols-2 max-w-3xl'} gap-6 w-full`}>
                     <button onClick={() => setAuthView('laser')} className="bg-slate-800 hover:bg-indigo-600 p-8 rounded-[2.5rem] border border-slate-700 transition flex flex-col items-center gap-4 group">
                         <Zap size={48} className="text-indigo-400 group-hover:text-white"/>
                         <h2 className="text-2xl font-black text-white">حساب ماكينة الليزر</h2>
                     </button>
+                    {showIndoorIcon && (
+                        <button onClick={() => setAuthView('indoor')} className="bg-slate-800 hover:bg-cyan-600 p-8 rounded-[2.5rem] border border-slate-700 transition flex flex-col items-center gap-4 group animate-in zoom-in duration-200">
+                            <Printer size={48} className="text-cyan-400 group-hover:text-white"/>
+                            <h2 className="text-2xl font-black text-white">طباعة ان دور</h2>
+                        </button>
+                    )}
                     <button onClick={() => setAuthView('office')} className="bg-slate-800 hover:bg-emerald-600 p-8 rounded-[2.5rem] border border-slate-700 transition flex flex-col items-center gap-4 group">
                         <Package size={48} className="text-emerald-400 group-hover:text-white"/>
                         <h2 className="text-2xl font-black text-white">حسابات مكتب بولا</h2>
@@ -898,8 +923,8 @@
           }
 
           if (currentView === 'laser') return <LaserSystem backToHome={() => setCurrentView('landing')} orders={orders} laserBills={laserBills} db={db} appId={appId} items={items} />;
+          if (currentView === 'indoor') return <IndoorSystem backToHome={() => { setCurrentView('landing'); setShowIndoorIcon(false); }} orders={orders} indoorBills={indoorBills} db={db} appId={appId} items={items} />;
           if (currentView === 'office') return <OfficeSystem backToHome={() => setCurrentView('landing')} orders={orders} items={items} expenses={expenses} customers={customers} employees={employees} debtPayments={debtPayments} deletedLogs={deletedLogs} ratings={ratings} db={db} appId={appId} appSettings={appSettings} setAppSettings={setAppSettings} />;
-          
           return null;
         };
 
@@ -1129,6 +1154,231 @@
         };
 
         // =====================================================================
+        // === INDOOR PRINTING SYSTEM
+        // =====================================================================
+        const IndoorSystem = ({ backToHome, orders, indoorBills, db, appId, items = [] }) => {
+            const [period, setPeriod] = useState('all');
+            const [indoorTab, setIndoorTab] = useState('accounts');
+            const [showAddBill, setShowAddBill] = useState(false);
+            const [billData, setBillData] = useState({amount: '', desc: ''});
+            const [showSettleConfirm, setShowSettleConfirm] = useState(false);
+
+            const today = new Date().toLocaleDateString('en-CA');
+
+            const getIndoorIncome = (orderList) => {
+                return orderList.reduce((sum, o) => sum + (o.items || []).filter(i => i.isIndoor).reduce((s, i) => s + (i.currentPrice * i.qty), 0), 0);
+            };
+
+            const stats = useMemo(() => {
+                const curMonth = today.slice(0, 7);
+                const filteredOrders = orders.filter(o => {
+                    if(period === 'daily') return o.dateString === today;
+                    if(period === 'monthly') return o.dateString?.startsWith(curMonth);
+                    return true;
+                });
+                const filteredBills = indoorBills.filter(b => {
+                    if(period === 'daily') return b.dateString === today;
+                    if(period === 'monthly') return b.dateString?.startsWith(curMonth);
+                    return true;
+                });
+
+                const income = getIndoorIncome(filteredOrders);
+                const billsTotal = filteredBills.reduce((sum, b) => sum + (parseFloat(b.amount)||0), 0);
+                const net = income - billsTotal;
+                return { income, billsTotal, net, partnerShare: net > 0 ? net / 2 : 0, filteredBills };
+            }, [orders, indoorBills, period, today]);
+
+            const initiateSettle = () => {
+                if(stats.partnerShare <= 0) return alert("لا توجد أرباح حالياً لتصفيتها");
+                setShowSettleConfirm(true);
+            };
+
+            const confirmSettle = async () => {
+                if (window.__paulaIndoorSettling) return;
+                window.__paulaIndoorSettling = true;
+                try {
+                    await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'indoor_bills'), {
+                        description: "تصفية حساب الشريك (تصفير)",
+                        amount: Math.round(stats.partnerShare * 2 * 100) / 100,
+                        dateString: today,
+                        createdAt: serverTimestamp()
+                    });
+                    setShowSettleConfirm(false);
+                } catch (e) {
+                    console.error(e);
+                    alert('حدث خطأ أثناء التصفية، حاول مرة أخرى');
+                } finally {
+                    window.__paulaIndoorSettling = false;
+                }
+            };
+
+            return (
+                <div className="min-h-screen bg-slate-900 text-white p-4 md:p-8 font-sans" dir="rtl">
+                    <div className="flex justify-between items-center mb-8 bg-slate-800 p-4 rounded-3xl border border-slate-700">
+                        <button onClick={backToHome} className="bg-slate-700 p-3 rounded-xl hover:bg-red-500 transition"><LogOut size={20}/></button>
+                        <h1 className="text-xl font-black flex items-center gap-2"><Printer className="text-cyan-400"/> حسابات طباعة ان دور</h1>
+                        <select className="bg-slate-700 text-xs font-black p-2 rounded-xl outline-none" value={period} onChange={e=>setPeriod(e.target.value)}>
+                            <option value="all">كل الأوقات</option>
+                            <option value="daily">اليوم</option>
+                            <option value="monthly">هذا الشهر</option>
+                        </select>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-3 mb-6">
+                        <button onClick={()=>setIndoorTab('warehouse')} className={`p-5 rounded-[2rem] font-black text-center border transition ${indoorTab==='warehouse' ? 'bg-cyan-600 border-cyan-400 text-white' : 'bg-slate-800 border-slate-700 text-slate-200 hover:border-cyan-400'}`}>
+                            <div className="text-2xl mb-1">📦</div>
+                            المخزن
+                            <div className="text-[10px] font-bold text-cyan-200 mt-1">أصناف طباعة ان دور فقط</div>
+                        </button>
+                        <button onClick={()=>setIndoorTab('orders')} className={`p-5 rounded-[2rem] font-black text-center border transition ${indoorTab==='orders' ? 'bg-emerald-600 border-emerald-400 text-white' : 'bg-slate-800 border-slate-700 text-slate-200 hover:border-emerald-400'}`}>
+                            <div className="text-2xl mb-1">🧾</div>
+                            الطلبات
+                            <div className="text-[10px] font-bold text-emerald-200 mt-1">فواتير فيها أصناف طباعة ان دور</div>
+                        </button>
+                    </div>
+                    {indoorTab !== 'accounts' && (
+                        <button onClick={()=>setIndoorTab('accounts')} className="mb-4 text-xs font-black text-slate-400 hover:text-white">← رجوع للحسابات</button>
+                    )}
+
+                    {indoorTab === 'warehouse' && (
+                        <div className="space-y-3 mb-8">
+                            {items.filter(i => i.isIndoor).length === 0 ? (
+                                <div className="text-center text-slate-500 font-black py-12">لا توجد أصناف طباعة ان دور في المخزن</div>
+                            ) : items.filter(i => i.isIndoor).sort((a,b)=>(a.name||'').localeCompare(b.name||'','ar')).map(item => (
+                                <div key={item.id} className="bg-slate-800 border border-slate-700 p-4 rounded-2xl flex justify-between items-center">
+                                    <div>
+                                        <div className="font-black text-white">{item.name}</div>
+                                        <div className="text-xs text-slate-400 font-bold mt-1">قطاعي {item.price} ج {item.wholesalePrice ? ' • جملة '+item.wholesalePrice+' ج' : ''}</div>
+                                    </div>
+                                    <div className="text-left">
+                                        <div className={`text-2xl font-black ${(item.stock||0) < 5 ? 'text-amber-400' : 'text-cyan-300'}`}>{item.stock ?? 0}</div>
+                                        <div className="text-[10px] text-slate-500 font-bold">قطعة</div>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+
+                    {indoorTab === 'orders' && (
+                        <div className="space-y-3 mb-8">
+                            {orders.filter(o => (o.items||[]).some(i => i.isIndoor)).length === 0 ? (
+                                <div className="text-center text-slate-500 font-black py-12">لا توجد فواتير فيها أصناف طباعة ان دور</div>
+                            ) : orders.filter(o => (o.items||[]).some(i => i.isIndoor)).sort((a,b)=>(b.dateString||'').localeCompare(a.dateString||'')).map(order => {
+                                const indoorItems = (order.items||[]).filter(i => i.isIndoor);
+                                const indoorTotal = indoorItems.reduce((s,i)=>s+(i.currentPrice||i.price||0)*i.qty, 0);
+                                return (
+                                <div key={order.id} className="bg-slate-800 border border-slate-700 p-4 rounded-2xl">
+                                    <div className="flex justify-between items-start mb-2">
+                                        <div>
+                                            <div className="font-black text-white">{order.customerName || 'بدون اسم'}</div>
+                                            <div className="text-xs text-slate-400 font-bold">{order.customerPhone || '—'}</div>
+                                        </div>
+                                        <div className="text-left">
+                                            <div className="text-[10px] text-slate-500 font-bold">{order.dateString}</div>
+                                            <div className="text-sm font-black text-emerald-400">{indoorTotal} ج ان دور</div>
+                                        </div>
+                                    </div>
+                                    <div className="text-xs text-slate-300 space-y-0.5">
+                                        {indoorItems.map((item, i) => (
+                                            <div key={i}>• {item.name} ×{item.qty} = {(item.currentPrice||item.price||0)*item.qty} ج</div>
+                                        ))}
+                                    </div>
+                                    {order.employeeName && <div className="text-[10px] text-slate-500 font-bold mt-2">موظف: {order.employeeName}</div>}
+                                </div>
+                                );
+                            })}
+                        </div>
+                    )}
+
+                    {indoorTab === 'accounts' && (
+                    <>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8 animate-in fade-in duration-300">
+                        <div className="bg-slate-800 p-6 rounded-[2.5rem] border border-slate-700">
+                            <div className="text-xs text-slate-400 font-black mb-2 uppercase">إجمالي مبيعات طباعة ان دور</div>
+                            <div className="text-3xl font-black text-emerald-400">{stats.income} ج</div>
+                        </div>
+                        <div className="bg-cyan-600 p-6 rounded-[2.5rem] shadow-xl relative overflow-hidden">
+                            <div className="relative z-10">
+                                <div className="text-xs text-cyan-100 font-black mb-2 uppercase">نصيب الشريك (50%)</div>
+                                <div className="text-4xl font-black text-white mb-4">{stats.partnerShare} ج</div>
+                                <button onClick={initiateSettle} className="w-full bg-white/20 hover:bg-white/40 py-3 rounded-xl font-black text-xs flex items-center justify-center gap-2 transition">
+                                    <RefreshCcw size={16}/> تصفية وتصفير الحساب
+                                </button>
+                            </div>
+                        </div>
+                        <div className="bg-slate-800 p-6 rounded-[2.5rem] border border-slate-700">
+                            <div className="text-xs text-slate-400 font-black mb-2 uppercase">الفواتير والمصاريف</div>
+                            <div className="text-3xl font-black text-red-400">{stats.billsTotal} ج</div>
+                        </div>
+                    </div>
+
+                    <div className="bg-slate-800 p-6 rounded-[2.5rem] border border-slate-700">
+                        <div className="flex justify-between items-center mb-6">
+                            <h3 className="font-black">سجل الفواتير والمصاريف</h3>
+                            <button onClick={()=>setShowAddBill(true)} className="bg-cyan-500 p-2 rounded-xl hover:bg-cyan-600 transition"><Plus/></button>
+                        </div>
+                        <div className="space-y-2 max-h-96 overflow-y-auto scrollbar-hide">
+                            {stats.filteredBills.map(b => (
+                                <div key={b.id} className="bg-slate-900/50 p-4 rounded-2xl flex justify-between items-center">
+                                    <div><div className="font-bold">{b.description}</div><div className="text-[10px] text-slate-500">{b.dateString}</div></div>
+                                    <div className="flex items-center gap-4">
+                                        <span className="font-black text-red-400">{b.amount} ج</span>
+                                        <button onClick={()=>{ if(window.confirm('متأكد إنك عايز تحذف الفاتورة دي؟ مش هينفع ترجعه تاني')) deleteDoc(doc(db,'artifacts',appId,'public','data','indoor_bills',b.id)).catch(err=>{ console.error(err); alert('حدث خطأ أثناء الحذف'); }); }} className="text-slate-600 hover:text-red-500 transition"><Trash2 size={16}/></button>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+
+                    {showAddBill && (
+                        <div className="fixed inset-0 bg-black/80 flex items-center justify-center p-4 z-[100]">
+                            <div className="bg-slate-800 p-8 rounded-[2.5rem] w-full max-w-sm border border-slate-600">
+                                <h3 className="text-center font-black mb-6">إضافة فاتورة جديدة</h3>
+                                <input className="w-full p-3 bg-slate-900 rounded-xl mb-3 text-center font-black" placeholder="المبلغ" type="number" value={billData.amount} onChange={e=>setBillData({...billData, amount:e.target.value})}/>
+                                <input className="w-full p-3 bg-slate-900 rounded-xl mb-4 text-center font-black" placeholder="الوصف" value={billData.desc} onChange={e=>setBillData({...billData, desc:e.target.value})}/>
+                                <div className="flex gap-2">
+                                    <button onClick={async()=>{
+                                        if(billData.amount && billData.desc && Number.isFinite(parseFloat(billData.amount)) && parseFloat(billData.amount) > 0){
+                                            await addDoc(collection(db,'artifacts',appId,'public','data','indoor_bills'), {
+                                                description: billData.desc,
+                                                amount: parseFloat(billData.amount),
+                                                dateString: today,
+                                                createdAt: serverTimestamp()
+                                            });
+                                            setShowAddBill(false); setBillData({amount:'', desc:''});
+                                        }
+                                    }} className="flex-1 bg-cyan-600 py-3 rounded-xl font-black">حفظ</button>
+                                    <button onClick={()=>setShowAddBill(false)} className="flex-1 bg-slate-700 py-3 rounded-xl font-black">إلغاء</button>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    </>
+                    )}
+
+                    {showSettleConfirm && (
+                        <div className="fixed inset-0 bg-black/90 flex items-center justify-center p-4 z-[100]">
+                            <div className="bg-slate-800 p-8 rounded-[2.5rem] w-full max-w-sm border border-cyan-500/50 text-center animate-in zoom-in duration-200">
+                                <div className="bg-cyan-500/20 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4 text-cyan-400">
+                                    <AlertTriangle size={32}/>
+                                </div>
+                                <h3 className="text-xl font-black mb-2">تصفير الحساب؟</h3>
+                                <p className="text-slate-400 text-sm font-bold mb-6">
+                                    سيتم تصفير الأرباح الحالية ({stats.partnerShare} ج) وبدء حساب جديد. هل أنت متأكد؟
+                                </p>
+                                <div className="flex gap-2">
+                                    <button onClick={confirmSettle} className="flex-1 bg-cyan-600 hover:bg-cyan-700 py-3 rounded-xl font-black transition">نعم، تصفير</button>
+                                    <button onClick={()=>setShowSettleConfirm(false)} className="flex-1 bg-slate-700 hover:bg-slate-600 py-3 rounded-xl font-black transition">إلغاء</button>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+                </div>
+            );
+        };
+
+        // =====================================================================
         // === OFFICE SYSTEM
         // =====================================================================
         const OfficeSystem = ({ backToHome, orders, items, expenses, customers, employees, debtPayments, deletedLogs, ratings, db, appId, appSettings, setAppSettings }) => {
@@ -1172,7 +1422,7 @@
             const [tempWholesale, setTempWholesale] = useState('');
             const [editingStockItem, setEditingStockItem] = useState(null);
             const [newStockValue, setNewStockValue] = useState('');
-            const [editItemData, setEditItemData] = useState({name: '', price: '', wholesalePrice: '', category: '', linkedItemId: '', soldByMeter: false, meterUnitPrice: ''});
+            const [editItemData, setEditItemData] = useState({name: '', price: '', wholesalePrice: '', category: '', linkedItemId: '', soldByMeter: false, meterUnitPrice: '', meterWholesalePrice: '', isLaser: false, isIndoor: false});
             const [newCategoryName, setNewCategoryName] = useState('');
             const [showTopCustomers, setShowTopCustomers] = useState(false);
             const [showEditPromoMsg, setShowEditPromoMsg] = useState(false);
@@ -1268,8 +1518,9 @@
                     const matchSearch = !q || (i.name || '').includes(q);
                     let matchCat = true;
                     if (activeCategory === 'laser') matchCat = !!i.isLaser;
+                    else if (activeCategory === 'indoor') matchCat = !!i.isIndoor;
                     else if (activeCategory === 'printing') matchCat = !!i.isPrintingMaterial;
-                    else if (activeCategory === 'other') matchCat = !i.isLaser && !i.isPrintingMaterial;
+                    else if (activeCategory === 'other') matchCat = !i.isLaser && !i.isIndoor && !i.isPrintingMaterial;
                     else if (activeCategory && activeCategory.startsWith('cat:')) matchCat = i.category === activeCategory.slice(4);
                     return matchSearch && matchCat;
                 });
@@ -1406,7 +1657,9 @@
                     const count = parseInt(qtyInput) || 1;
                     if (!l || !w) return alert('أدخل الطول والعرض بالمتر');
                     const area = l * w * count;
-                    const unitPrice = itemToAddToOrder.meterUnitPrice || itemToAddToOrder.price || 0;
+                    const unitPrice = isWholesale
+                        ? (itemToAddToOrder.meterWholesalePrice || itemToAddToOrder.wholesalePrice || itemToAddToOrder.meterUnitPrice || itemToAddToOrder.price || 0)
+                        : (itemToAddToOrder.meterUnitPrice || itemToAddToOrder.price || 0);
                     const lineName = `${itemToAddToOrder.name} (${l}م × ${w}م)${count>1?' ×'+count:''}`;
                     setCart([...cart, {
                         ...itemToAddToOrder,
@@ -2684,6 +2937,7 @@
                                         {[
                                             {id: 'all', n: 'الكل', i: <Layers size={14}/>},
                                             {id: 'laser', n: 'ليزر', i: <Zap size={14}/>},
+                                            {id: 'indoor', n: 'طباعة ان دور', i: <Printer size={14}/>},
                                             {id: 'printing', n: 'خامات طباعة', i: <Camera size={14}/>},
                                             {id: 'other', n: 'أخرى', i: <Package size={14}/>},
                                             ...((appSettings.itemCategories || []).map(c => ({id: 'cat:'+c, n: c, i: <Package size={14}/>})))
@@ -2729,12 +2983,15 @@
 
                                 <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
                                     {salesItemsFiltered.map(item => {
-                                        const price = isWholesale ? (item.wholesalePrice || item.price) : item.price;
+                                        const price = isWholesale
+                                            ? (item.soldByMeter ? (item.meterWholesalePrice || item.wholesalePrice || item.meterUnitPrice || item.price) : (item.wholesalePrice || item.price))
+                                            : (item.soldByMeter ? (item.meterUnitPrice || item.price) : item.price);
                                         return (
                                             <button key={item.id} onClick={()=> handleItemClick(item)} className="bg-white p-6 rounded-[2rem] border border-slate-100 shadow-sm hover:shadow-md transition text-center relative group">
                                                 <div className="font-black text-slate-800 mb-1">{item.name}</div>
                                                 <div className={`font-black text-xl ${isWholesale ? 'text-amber-600' : 'text-emerald-600'}`}>{price} ج</div>
                                                 {item.isLaser && <Zap size={14} className="absolute top-4 left-4 text-amber-500"/>}
+                                                {item.isIndoor && <Printer size={14} className="absolute top-4 left-4 text-cyan-600"/>}
                                                 {item.isPrintingMaterial && <Camera size={14} className="absolute top-4 left-4 text-blue-500"/>}
                                             </button>
                                         );
@@ -3065,7 +3322,7 @@
                                 ).map(item => (
                                     <div key={item.id} className={`bg-white p-6 rounded-3xl shadow-sm border relative group flex flex-col justify-between min-h-[160px] transition-all ${item.stock < 5 && !item.isPrintingMaterial && !item.isPrinting ? 'border-red-200 bg-red-50/30' : 'border-slate-100'}`}>
                                         <div className="absolute top-4 left-4 text-slate-300">
-                                            {item.isLaser ? <Zap size={16} className="text-amber-500"/> : item.isPrintingMaterial ? <Camera size={16} className="text-blue-500"/> : null}
+                                            {item.isLaser ? <Zap size={16} className="text-amber-500"/> : item.isIndoor ? <Printer size={16} className="text-cyan-600"/> : item.isPrintingMaterial ? <Camera size={16} className="text-blue-500"/> : null}
                                         </div>
 
                                         <div>
@@ -3129,7 +3386,10 @@
                                                 category: item.category || '',
                                                 linkedItemId: item.linkedItemId || '',
                                                 soldByMeter: !!item.soldByMeter,
-                                                meterUnitPrice: item.meterUnitPrice || ''
+                                                meterUnitPrice: item.meterUnitPrice || item.price || '',
+                                                meterWholesalePrice: item.meterWholesalePrice || item.wholesalePrice || item.price || '',
+                                                isLaser: !!item.isLaser,
+                                                isIndoor: !!item.isIndoor
                                             });
                                         }} className="mt-4 bg-slate-900 text-white px-6 py-2 rounded-xl text-xs font-black shadow-lg hover:scale-105 transition w-full">تعديل الصنف</button>
                                     </div>
@@ -3911,7 +4171,7 @@
                                 </div>
                                 <input id="ni-s" type="number" className="w-full p-4 bg-slate-50 rounded-2xl mb-4 font-black text-center" placeholder="الكمية الافتتاحية"/>
                                 
-                                <div 
+                                <div
                                     id="ni-nostock"
                                     className="w-full p-3 rounded-2xl border-2 border-slate-100 cursor-pointer flex items-center justify-center gap-2 mb-4 transition hover:border-emerald-300"
                                     onClick={(e)=>{
@@ -3923,7 +4183,6 @@
                                         } else {
                                             el.classList.add('border-emerald-500', 'bg-emerald-50');
                                             if(stockInput) stockInput.style.display = 'none';
-                                            document.getElementById('ni-islaser')?.classList.remove('border-indigo-500', 'bg-indigo-50');
                                             document.getElementById('ni-isprinting')?.classList.remove('border-blue-500', 'bg-blue-50');
                                         }
                                     }}
@@ -3931,7 +4190,7 @@
                                     <span className="font-black text-sm text-slate-600">✓ خدمة لا تطلب مخزون</span>
                                 </div>
 
-                                <div 
+                                <div
                                     id="ni-bymeter"
                                     className="w-full p-3 rounded-2xl border-2 border-slate-100 cursor-pointer flex items-center justify-center gap-2 mb-2 transition hover:border-blue-300"
                                     onClick={(e)=>{
@@ -3942,52 +4201,91 @@
                                             if(meterInput) meterInput.style.display = 'none';
                                         } else {
                                             el.classList.add('border-blue-500', 'bg-blue-50');
-                                            if(meterInput) meterInput.style.display = 'block';
+                                            if(meterInput) meterInput.style.display = 'grid';
                                         }
                                     }}
                                 >
                                     <span className="font-black text-sm text-slate-600">✓ هل هذا المنتج يباع بالمتر؟</span>
                                 </div>
-                                <div id="ni-meter-price-wrap" style={{display: 'none'}} className="mb-4">
-                                    <input id="ni-meter-price" type="number" className="w-full p-3 bg-blue-50 rounded-xl font-black text-center border-2 border-blue-200 outline-none" placeholder="سعر المتر (جنيه)"/>
+                                <div id="ni-meter-price-wrap" style={{display: 'none'}} className="grid-cols-2 gap-3 mb-4">
+                                    <input id="ni-meter-price" type="number" className="w-full p-3 bg-blue-50 rounded-xl font-black text-center border-2 border-blue-200 outline-none" placeholder="سعر القطاعي"/>
+                                    <input id="ni-meter-wholesale-price" type="number" className="w-full p-3 bg-amber-50 rounded-xl font-black text-center border-2 border-amber-200 outline-none" placeholder="سعر الجملة"/>
                                 </div>
 
-                                <div className="flex gap-4 mb-6">
-                                     <div className={`flex-1 p-4 rounded-2xl border-2 cursor-pointer flex flex-col items-center gap-2 transition ${document.getElementById('ni-islaser')?.classList.contains('border-indigo-500') ? 'border-indigo-500 bg-indigo-50' : 'border-slate-100'}`} 
+                                <div className="grid grid-cols-3 gap-3 mb-6">
+                                     <div className={`p-4 rounded-2xl border-2 cursor-pointer flex flex-col items-center gap-2 transition ${document.getElementById('ni-islaser')?.classList.contains('border-indigo-500') ? 'border-indigo-500 bg-indigo-50' : 'border-slate-100'}`}
                                           id="ni-islaser"
                                           onClick={(e)=>{
                                              const el = e.currentTarget;
                                              if(el.classList.contains('border-indigo-500')) el.classList.remove('border-indigo-500', 'bg-indigo-50');
-                                             else { el.classList.add('border-indigo-500', 'bg-indigo-50'); document.getElementById('ni-isprinting')?.classList.remove('border-blue-500', 'bg-blue-50'); }
+                                             else {
+                                                 el.classList.add('border-indigo-500', 'bg-indigo-50');
+                                                 document.getElementById('ni-isindoor')?.classList.remove('border-cyan-500', 'bg-cyan-50');
+                                                 document.getElementById('ni-isprinting')?.classList.remove('border-blue-500', 'bg-blue-50');
+                                             }
                                           }}>
                                          <Zap className="text-indigo-500"/>
-                                         <span className="font-black text-xs text-slate-500">منتج ليزر</span>
+                                         <span className="font-black text-xs text-slate-500 text-center">منتج ليزر</span>
                                      </div>
 
-                                     <div className={`flex-1 p-4 rounded-2xl border-2 cursor-pointer flex flex-col items-center gap-2 transition ${document.getElementById('ni-isprinting')?.classList.contains('border-blue-500') ? 'border-blue-500 bg-blue-50' : 'border-slate-100'}`} 
+                                     <div className={`p-4 rounded-2xl border-2 cursor-pointer flex flex-col items-center gap-2 transition ${document.getElementById('ni-isindoor')?.classList.contains('border-cyan-500') ? 'border-cyan-500 bg-cyan-50' : 'border-slate-100'}`}
+                                          id="ni-isindoor"
+                                          onClick={(e)=>{
+                                             const el = e.currentTarget;
+                                             if(el.classList.contains('border-cyan-500')) el.classList.remove('border-cyan-500', 'bg-cyan-50');
+                                             else {
+                                                 el.classList.add('border-cyan-500', 'bg-cyan-50');
+                                                 document.getElementById('ni-islaser')?.classList.remove('border-indigo-500', 'bg-indigo-50');
+                                                 document.getElementById('ni-isprinting')?.classList.remove('border-blue-500', 'bg-blue-50');
+                                             }
+                                          }}>
+                                         <Printer className="text-cyan-600"/>
+                                         <span className="font-black text-xs text-slate-500 text-center">طباعه ان دور</span>
+                                     </div>
+
+                                     <div className={`p-4 rounded-2xl border-2 cursor-pointer flex flex-col items-center gap-2 transition ${document.getElementById('ni-isprinting')?.classList.contains('border-blue-500') ? 'border-blue-500 bg-blue-50' : 'border-slate-100'}`}
                                           id="ni-isprinting"
                                           onClick={(e)=>{
                                              const el = e.currentTarget;
                                              if(el.classList.contains('border-blue-500')) el.classList.remove('border-blue-500', 'bg-blue-50');
-                                             else { el.classList.add('border-blue-500', 'bg-blue-50'); document.getElementById('ni-islaser')?.classList.remove('border-indigo-500', 'bg-indigo-50'); }
+                                             else {
+                                                 el.classList.add('border-blue-500', 'bg-blue-50');
+                                                 document.getElementById('ni-islaser')?.classList.remove('border-indigo-500', 'bg-indigo-50');
+                                                 document.getElementById('ni-isindoor')?.classList.remove('border-cyan-500', 'bg-cyan-50');
+                                             }
                                           }}>
                                          <Camera className="text-blue-500"/>
-                                         <span className="font-black text-xs text-slate-500">طباعة وتصوير</span>
+                                         <span className="font-black text-xs text-slate-500 text-center">طباعة وتصوير</span>
                                      </div>
                                 </div>
 
                                 <button onClick={async()=>{
                                     const n=document.getElementById('ni-n').value, p=document.getElementById('ni-p').value, w=document.getElementById('ni-w').value, s=document.getElementById('ni-s').value;
                                     const isL = document.getElementById('ni-islaser').classList.contains('border-indigo-500');
+                                    const isIndoor = document.getElementById('ni-isindoor').classList.contains('border-cyan-500');
                                     const isP = document.getElementById('ni-isprinting').classList.contains('border-blue-500');
                                     const isNoStock = document.getElementById('ni-nostock').classList.contains('border-emerald-500');
                                     const isByMeter = document.getElementById('ni-bymeter').classList.contains('border-blue-500');
                                     const meterPriceVal = parseFloat(document.getElementById('ni-meter-price')?.value) || 0;
-                                    
-                                    if(n&&p&&parseFloat(p)>0) {
+                                    const meterWholesaleVal = parseFloat(document.getElementById('ni-meter-wholesale-price')?.value) || 0;
+
+                                    const retailPrice = isByMeter ? (meterPriceVal || parseFloat(p) || 0) : (parseFloat(p) || 0);
+                                    const wholesalePrice = isByMeter
+                                        ? (meterWholesaleVal || parseFloat(w) || retailPrice)
+                                        : (parseFloat(w) || retailPrice);
+
+                                    if(n && retailPrice > 0) {
                                         const newItem = {
-                                            name:n, price:parseFloat(p), wholesalePrice: parseFloat(w) || parseFloat(p), stock: isNoStock || isP ? 0 : (parseInt(s)||0), isLaser:isL, isPrintingMaterial: isP || isNoStock,
-                                            soldByMeter: isByMeter, meterUnitPrice: isByMeter ? (meterPriceVal || parseFloat(p)) : 0
+                                            name:n,
+                                            price: retailPrice,
+                                            wholesalePrice: wholesalePrice,
+                                            stock: isNoStock || isP ? 0 : (parseInt(s)||0),
+                                            isLaser: isL,
+                                            isIndoor: isIndoor,
+                                            isPrintingMaterial: isP || isNoStock,
+                                            soldByMeter: isByMeter,
+                                            meterUnitPrice: isByMeter ? retailPrice : 0,
+                                            meterWholesalePrice: isByMeter ? wholesalePrice : 0
                                         };
                                         await addDoc(collection(db,'artifacts',appId,'public', 'data', 'inventory'), newItem);
                                         // مزامنة سعر العميل مع المتجر
@@ -4035,8 +4333,22 @@
                                     <span className="font-black text-sm text-slate-600">يُباع بالمتر</span>
                                 </label>
                                 {editItemData.soldByMeter && (
-                                    <input type="number" className="w-full p-3 bg-blue-50 rounded-xl mb-4 text-center font-black border-2 border-blue-200 outline-none" placeholder="سعر المتر" value={editItemData.meterUnitPrice||''} onChange={e => setEditItemData({...editItemData, meterUnitPrice: e.target.value})} />
+                                    <div className="grid grid-cols-2 gap-2 mb-4">
+                                        <input type="number" className="w-full p-3 bg-blue-50 rounded-xl text-center font-black border-2 border-blue-200 outline-none" placeholder="سعر القطاعي" value={editItemData.meterUnitPrice||''} onChange={e => setEditItemData({...editItemData, meterUnitPrice: e.target.value})} />
+                                        <input type="number" className="w-full p-3 bg-amber-50 rounded-xl text-center font-black border-2 border-amber-200 outline-none" placeholder="سعر الجملة" value={editItemData.meterWholesalePrice||''} onChange={e => setEditItemData({...editItemData, meterWholesalePrice: e.target.value})} />
+                                    </div>
                                 )}
+
+                                <div className="grid grid-cols-2 gap-2 mb-4">
+                                    <label className={`flex items-center justify-center gap-2 p-2.5 rounded-xl border-2 cursor-pointer text-xs font-black ${editItemData.isLaser ? 'border-indigo-500 bg-indigo-50 text-indigo-700' : 'border-slate-100 text-slate-500'}`}>
+                                        <input type="checkbox" checked={!!editItemData.isLaser} onChange={e => setEditItemData({...editItemData, isLaser: e.target.checked, isIndoor: e.target.checked ? false : editItemData.isIndoor})} className="hidden" />
+                                        <Zap size={14}/> منتج ليزر
+                                    </label>
+                                    <label className={`flex items-center justify-center gap-2 p-2.5 rounded-xl border-2 cursor-pointer text-xs font-black ${editItemData.isIndoor ? 'border-cyan-500 bg-cyan-50 text-cyan-700' : 'border-slate-100 text-slate-500'}`}>
+                                        <input type="checkbox" checked={!!editItemData.isIndoor} onChange={e => setEditItemData({...editItemData, isIndoor: e.target.checked, isLaser: e.target.checked ? false : editItemData.isLaser})} className="hidden" />
+                                        <Printer size={14}/> طباعة ان دور
+                                    </label>
+                                </div>
 
                                 {(!editingStockItem.isPrintingMaterial && !editingStockItem.isPrinting) && (
                                     <>
@@ -4048,14 +4360,19 @@
                                 <div className="flex gap-2">
                                     <button onClick={async () => {
                                             if (!editItemData.name.trim() || !editItemData.price) return alert("الاسم والسعر مطلوبين");
+                                            const meterRetail = parseFloat(editItemData.meterUnitPrice) || parseFloat(editItemData.price) || 0;
+                                            const meterWholesale = parseFloat(editItemData.meterWholesalePrice) || parseFloat(editItemData.wholesalePrice) || meterRetail;
                                             const updates = {
                                                 name: editItemData.name.trim(),
-                                                price: parseFloat(editItemData.price),
-                                                wholesalePrice: parseFloat(editItemData.wholesalePrice) || parseFloat(editItemData.price),
+                                                price: editItemData.soldByMeter ? meterRetail : parseFloat(editItemData.price),
+                                                wholesalePrice: editItemData.soldByMeter ? meterWholesale : (parseFloat(editItemData.wholesalePrice) || parseFloat(editItemData.price)),
                                                 category: editItemData.category || '',
                                                 linkedItemId: editItemData.linkedItemId || '',
+                                                isLaser: !!editItemData.isLaser,
+                                                isIndoor: !!editItemData.isIndoor,
                                                 soldByMeter: !!editItemData.soldByMeter,
-                                                meterUnitPrice: editItemData.soldByMeter ? (parseFloat(editItemData.meterUnitPrice) || parseFloat(editItemData.price) || 0) : 0
+                                                meterUnitPrice: editItemData.soldByMeter ? meterRetail : 0,
+                                                meterWholesalePrice: editItemData.soldByMeter ? meterWholesale : 0
                                             };
                                             if (!editingStockItem.isPrintingMaterial && !editingStockItem.isPrinting) {
                                                 const val = parseInt(newStockValue);
@@ -4138,9 +4455,13 @@
                         <div className="fixed inset-0 bg-black/80 flex items-center justify-center p-4 z-50">
                             <div className="bg-white rounded-[2.5rem] p-8 w-full max-w-sm shadow-2xl relative text-center">
                                 <h3 className="font-black text-xl mb-4 text-slate-800">إضافة: {itemToAddToOrder.name}</h3>
-                                {itemToAddToOrder.soldByMeter === true ? (
+                                {itemToAddToOrder.soldByMeter === true ? (() => {
+                                    const activeMeterPrice = isWholesale
+                                        ? (itemToAddToOrder.meterWholesalePrice || itemToAddToOrder.wholesalePrice || itemToAddToOrder.meterUnitPrice || itemToAddToOrder.price || 0)
+                                        : (itemToAddToOrder.meterUnitPrice || itemToAddToOrder.price || 0);
+                                    return (
                                     <>
-                                        <p className="text-blue-600 font-black mb-2 text-sm">يُباع بالمتر — سعر المتر: {itemToAddToOrder.meterUnitPrice || itemToAddToOrder.price} ج</p>
+                                        <p className={`${isWholesale ? 'text-amber-600' : 'text-blue-600'} font-black mb-2 text-sm`}>يُباع بالمتر ({isWholesale ? 'جملة' : 'قطاعي'}) — سعر المتر: {activeMeterPrice} ج</p>
                                         <div className="grid grid-cols-2 gap-3 mb-3">
                                             <div>
                                                 <label className="text-xs font-black text-slate-500">الطول (م)</label>
@@ -4155,10 +4476,11 @@
                                         <input type="number" className="w-full p-3 bg-slate-100 rounded-xl mb-2 text-center font-black text-xl outline-none" value={qtyInput} onChange={e => setQtyInput(e.target.value)} />
                                         <p className="text-emerald-600 font-black mb-4">
                                             المساحة: {((parseFloat(printDims.l)||0)*(parseFloat(printDims.w)||0)*(parseInt(qtyInput)||1)).toFixed(3)} م²
-                                            {' '}= {(((parseFloat(printDims.l)||0)*(parseFloat(printDims.w)||0)*(parseInt(qtyInput)||1))*(itemToAddToOrder.meterUnitPrice||itemToAddToOrder.price||0)).toFixed(0)} ج
+                                            {' '}= {(((parseFloat(printDims.l)||0)*(parseFloat(printDims.w)||0)*(parseInt(qtyInput)||1))*activeMeterPrice).toFixed(0)} ج
                                         </p>
                                     </>
-                                ) : (
+                                    );
+                                })() : (
                                     <>
                                         <p className="text-slate-500 font-bold mb-2">أدخل العدد المطلوب</p>
                                         <input type="number" className="w-full p-4 bg-slate-100 rounded-2xl mb-6 text-center font-black text-2xl border-2 border-transparent focus:border-emerald-500 outline-none" value={qtyInput} onChange={e => setQtyInput(e.target.value)} autoFocus onKeyDown={(e) => { if (e.key === 'Enter') handleAddItemToCart(); }}/>
