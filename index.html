@@ -97,6 +97,9 @@
           Settings, Check, RefreshCcw, AlertTriangle, FileText, Printer, Percent, Camera, Layers, UserCheck, TrendingUp, ShieldCheck, ClipboardList, Download, Upload, Database, CheckCircle, BellRing, Star, FolderPlus, MessageCircle
         } from 'lucide-react';
 
+        // تقريب المبالغ لتجنب الأرقام العشرية الطويلة (مثل 240.000000003)
+        const r2 = (v) => { const n = Number(v); return (v === '' || v == null || typeof v === 'boolean' || !isFinite(n)) ? v : Math.round((n + Number.EPSILON) * 100) / 100; };
+
         // =========================================================================
         // بيانات Firebase الخاصة باستوديو بولا
         // =========================================================================
@@ -331,7 +334,7 @@
                 <tr>
                     <td style="padding:8px 6px;border:1px solid #cbd5e1;text-align:center;width:44px;color:#64748b;">${idx + 1}</td>
                     <td style="padding:8px 10px;border:1px solid #cbd5e1;text-align:right;font-weight:700;">${escHtml(it.name)}</td>
-                    <td style="padding:8px 10px;border:1px solid #cbd5e1;text-align:center;width:110px;font-weight:900;color:#b45309;">${it.price} ج</td>
+                    <td style="padding:8px 10px;border:1px solid #cbd5e1;text-align:center;width:110px;font-weight:900;color:#b45309;">${r2(it.price)} ج</td>
                 </tr>`).join('');
             const inner = `
                 <div style="text-align:center;margin-bottom:16px;border-bottom:3px solid #1e293b;padding-bottom:12px;">
@@ -575,9 +578,9 @@
                     unpaid.forEach(o => {
                         msg += `*فاتورة بتاريخ ${o.dateString}*\n`;
                         (o.items||[]).forEach(item => { msg += `• ${item.name} (x${item.qty}) = ${(item.qty * item.currentPrice).toFixed(0)}ج\n`; });
-                        msg += `الإجمالي: ${o.total}ج | المدفوع: ${o.paid}ج | *الباقي: ${o.remaining}ج*\n\n`;
+                        msg += `الإجمالي: ${r2(o.total)}ج | المدفوع: ${r2(o.paid)}ج | *الباقي: ${r2(o.remaining)}ج*\n\n`;
                     });
-                    msg += `================\n*إجمالي المديونية: ${totalDebt} ج*\n`;
+                    msg += `================\n*إجمالي المديونية: ${r2(totalDebt)} ج*\n`;
                 }
                 const allItems = [];
                 unpaid.forEach(o => { (o.items||[]).forEach(item => { allItems.push(`• ${item.name} × ${item.qty}`); }); });
@@ -671,7 +674,7 @@
                                     {filteredItems.map(item => (
                                         <div key={item.id} className="bg-slate-800 p-4 rounded-2xl border border-slate-700 flex justify-between items-center">
                                             <div className="font-black text-sm">{item.name}</div>
-                                            <div className="font-black text-amber-400 text-lg">{item.wholesalePrice || item.price} ج</div>
+                                            <div className="font-black text-amber-400 text-lg">{r2(item.wholesalePrice || item.price)} ج</div>
                                         </div>
                                     ))}
                                     {filteredItems.length === 0 && <div className="text-center text-slate-500 py-10 font-bold">لا توجد أصناف</div>}
@@ -685,10 +688,10 @@
                             <div className="font-black text-xl mb-1">{displayName}</div>
                             <div className="text-sm text-slate-400 font-bold mb-4">{cphone}</div>
                             <div className={`text-center py-4 rounded-2xl font-black text-2xl mb-3 ${totalDebt > 0 ? 'bg-red-500/20 text-red-400' : 'bg-emerald-500/20 text-emerald-400'}`}>
-                                {totalDebt > 0 ? `المديونية الحالية: ${totalDebt} ج` : 'الحساب خالص ✅'}
+                                {totalDebt > 0 ? `المديونية الحالية: ${r2(totalDebt)} ج` : 'الحساب خالص ✅'}
                             </div>
                             <div className="text-center py-3 rounded-2xl font-black text-lg mb-4 bg-indigo-500/20 text-indigo-300">
-                                رصيد المحفظة: {walletBalance} ج
+                                رصيد المحفظة: {r2(walletBalance)} ج
                             </div>
                             <div className="grid grid-cols-3 gap-2 text-center">
                                 <div className="bg-slate-900/50 rounded-xl p-3">
@@ -697,11 +700,11 @@
                                 </div>
                                 <div className="bg-slate-900/50 rounded-xl p-3">
                                     <div className="text-[10px] text-slate-400 font-bold">إجمالي المشتريات</div>
-                                    <div className="font-black text-lg text-emerald-400">{yearTotal} ج</div>
+                                    <div className="font-black text-lg text-emerald-400">{r2(yearTotal)} ج</div>
                                 </div>
                                 <div className="bg-slate-900/50 rounded-xl p-3">
                                     <div className="text-[10px] text-slate-400 font-bold">إجمالي المدفوع</div>
-                                    <div className="font-black text-lg text-blue-400">{yearPaid} ج</div>
+                                    <div className="font-black text-lg text-blue-400">{r2(yearPaid)} ج</div>
                                 </div>
                             </div>
                         </div>
@@ -715,7 +718,7 @@
                                     <div className="flex justify-between items-center mb-2">
                                         <div className="text-xs text-slate-400 font-bold">{o.dateString}</div>
                                         <div className={`text-sm font-black ${o.remaining > 0 ? 'text-red-400' : 'text-emerald-400'}`}>
-                                            {o.remaining > 0 ? `باقي: ${o.remaining} ج` : 'خالص ✅'}
+                                            {o.remaining > 0 ? `باقي: ${r2(o.remaining)} ج` : 'خالص ✅'}
                                         </div>
                                     </div>
                                     <div className="space-y-1 text-sm text-slate-300">
@@ -727,11 +730,11 @@
                                         ))}
                                     </div>
                                     {(o.deliveryFee > 0) && (
-                                        <div className="text-xs text-orange-400 font-bold mt-1">دليفري: {o.deliveryFee} ج</div>
+                                        <div className="text-xs text-orange-400 font-bold mt-1">دليفري: {r2(o.deliveryFee)} ج</div>
                                     )}
                                     <div className="mt-2 pt-2 border-t border-slate-700 flex justify-between text-xs font-bold text-slate-400">
-                                        <span>إجمالي: {o.total} ج</span>
-                                        <span>مدفوع: {o.paid} ج</span>
+                                        <span>إجمالي: {r2(o.total)} ج</span>
+                                        <span>مدفوع: {r2(o.paid)} ج</span>
                                     </div>
                                 </div>
                             ))}
@@ -941,7 +944,7 @@
             const today = new Date().toLocaleDateString('en-CA');
 
             const getLaserIncome = (orderList) => {
-                return orderList.reduce((sum, o) => sum + (o.items || []).filter(i => i[flagKey]).reduce((s, i) => s + (i.currentPrice * i.qty), 0), 0);
+                return r2(orderList.reduce((sum, o) => sum + (o.items || []).filter(i => i[flagKey]).reduce((s, i) => s + (i.currentPrice * i.qty), 0), 0));
             };
 
             const stats = useMemo(() => {
@@ -960,7 +963,7 @@
                 const income = getLaserIncome(filteredOrders);
                 const billsTotal = filteredBills.reduce((sum, b) => sum + (parseFloat(b.amount)||0), 0);
                 const net = income - billsTotal;
-                return { income, billsTotal, net, partnerShare: net > 0 ? net / 2 : 0, filteredBills };
+                return { income, billsTotal, net, partnerShare: net > 0 ? r2(net / 2) : 0, filteredBills };
             }, [orders, laserBills, period, today]);
 
             const initiateSettle = () => {
@@ -1023,7 +1026,7 @@
                                 <div key={item.id} className="bg-slate-800 border border-slate-700 p-4 rounded-2xl flex justify-between items-center">
                                     <div>
                                         <div className="font-black text-white">{item.name}</div>
-                                        <div className="text-xs text-slate-400 font-bold mt-1">قطاعي {item.price} ج {item.wholesalePrice ? ' • جملة '+item.wholesalePrice+' ج' : ''}</div>
+                                        <div className="text-xs text-slate-400 font-bold mt-1">قطاعي {r2(item.price)} ج {item.wholesalePrice ? ' • جملة '+item.wholesalePrice+' ج' : ''}</div>
                                     </div>
                                     <div className="text-left">
                                         <div className={`text-2xl font-black ${(item.stock||0) < 5 ? 'text-amber-400' : 'text-indigo-300'}`}>{item.stock ?? 0}</div>
@@ -1040,7 +1043,7 @@
                                 <div className="text-center text-slate-500 font-black py-12">لا توجد {ordersLabel}</div>
                             ) : orders.filter(o => (o.items||[]).some(i => i[flagKey])).sort((a,b)=>(b.dateString||'').localeCompare(a.dateString||'')).map(order => {
                                 const laserItems = (order.items||[]).filter(i => i[flagKey]);
-                                const laserTotal = laserItems.reduce((s,i)=>s+(i.currentPrice||i.price||0)*i.qty, 0);
+                                const laserTotal = r2(laserItems.reduce((s,i)=>s+(i.currentPrice||i.price||0)*i.qty, 0));
                                 return (
                                 <div key={order.id} className="bg-slate-800 border border-slate-700 p-4 rounded-2xl">
                                     <div className="flex justify-between items-start mb-2">
@@ -1050,12 +1053,12 @@
                                         </div>
                                         <div className="text-left">
                                             <div className="text-[10px] text-slate-500 font-bold">{order.dateString}</div>
-                                            <div className="text-sm font-black text-emerald-400">{laserTotal} ج {flagKey === 'isPrintOnDoor' ? 'طباعة ان دور' : 'ليزر'}</div>
+                                            <div className="text-sm font-black text-emerald-400">{r2(laserTotal)} ج {flagKey === 'isPrintOnDoor' ? 'طباعة ان دور' : 'ليزر'}</div>
                                         </div>
                                     </div>
                                     <div className="text-xs text-slate-300 space-y-0.5">
                                         {laserItems.map((item, i) => (
-                                            <div key={i}>• {item.name} ×{item.qty} = {(item.currentPrice||item.price||0)*item.qty} ج</div>
+                                            <div key={i}>• {item.name} ×{item.qty} = {r2((item.currentPrice||item.price||0)*item.qty)} ج</div>
                                         ))}
                                     </div>
                                     {order.employeeName && <div className="text-[10px] text-slate-500 font-bold mt-2">موظف: {order.employeeName}</div>}
@@ -1070,12 +1073,12 @@
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8 animate-in fade-in duration-300">
                         <div className="bg-slate-800 p-6 rounded-[2.5rem] border border-slate-700">
                             <div className="text-xs text-slate-400 font-black mb-2 uppercase">إجمالي {accountLabel}</div>
-                            <div className="text-3xl font-black text-emerald-400">{stats.income} ج</div>
+                            <div className="text-3xl font-black text-emerald-400">{r2(stats.income)} ج</div>
                         </div>
                         <div className="bg-indigo-600 p-6 rounded-[2.5rem] shadow-xl relative overflow-hidden">
                             <div className="relative z-10">
                                 <div className="text-xs text-indigo-100 font-black mb-2 uppercase">نصيب الشريك (50%)</div>
-                                <div className="text-4xl font-black text-white mb-4">{stats.partnerShare} ج</div>
+                                <div className="text-4xl font-black text-white mb-4">{r2(stats.partnerShare)} ج</div>
                                 <button onClick={initiateSettle} className="w-full bg-white/20 hover:bg-white/40 py-3 rounded-xl font-black text-xs flex items-center justify-center gap-2 transition">
                                     <RefreshCcw size={16}/> تصفية وتصفير الحساب
                                 </button>
@@ -1083,7 +1086,7 @@
                         </div>
                         <div className="bg-slate-800 p-6 rounded-[2.5rem] border border-slate-700">
                             <div className="text-xs text-slate-400 font-black mb-2 uppercase">الفواتير والمصاريف</div>
-                            <div className="text-3xl font-black text-red-400">{stats.billsTotal} ج</div>
+                            <div className="text-3xl font-black text-red-400">{r2(stats.billsTotal)} ج</div>
                         </div>
                     </div>
 
@@ -1097,7 +1100,7 @@
                                 <div key={b.id} className="bg-slate-900/50 p-4 rounded-2xl flex justify-between items-center">
                                     <div><div className="font-bold">{b.description}</div><div className="text-[10px] text-slate-500">{b.dateString}</div></div>
                                     <div className="flex items-center gap-4">
-                                        <span className="font-black text-red-400">{b.amount} ج</span>
+                                        <span className="font-black text-red-400">{r2(b.amount)} ج</span>
                                         <button onClick={()=>{ if(window.confirm('متأكد إنك عايز تحذف الفاتورة دي؟ مش هينفع ترجعه تاني')) deleteDoc(doc(db,'artifacts',appId,'public','data',billsCol,b.id)).catch(err=>{ console.error(err); alert('حدث خطأ أثناء الحذف'); }); }} className="text-slate-600 hover:text-red-500 transition"><Trash2 size={16}/></button>
                                     </div>
                                 </div>
@@ -1140,7 +1143,7 @@
                                 </div>
                                 <h3 className="text-xl font-black mb-2">تصفير الحساب؟</h3>
                                 <p className="text-slate-400 text-sm font-bold mb-6">
-                                    سيتم تصفير الأرباح الحالية ({stats.partnerShare} ج) وبدء حساب جديد. هل أنت متأكد؟
+                                    سيتم تصفير الأرباح الحالية ({r2(stats.partnerShare)} ج) وبدء حساب جديد. هل أنت متأكد؟
                                 </p>
                                 <div className="flex gap-2">
                                     <button onClick={confirmSettle} className="flex-1 bg-indigo-600 hover:bg-indigo-700 py-3 rounded-xl font-black transition">نعم، تصفير</button>
@@ -1500,14 +1503,14 @@
             };
             const handleCheckoutInner = async () => {
                 if(!cart.length) return alert("السلة فارغة");
-                const subTotalTemp = cart.reduce((a,b)=>a+(b.currentPrice*b.qty),0);
+                const subTotalTemp = r2(cart.reduce((a,b)=>a+(b.currentPrice*b.qty),0));
                 const discountValTemp = parseFloat(discount) || 0;
                 const deliveryValTemp = parseFloat(deliveryFee) || 0;
                 const totalTemp = Math.max(0, subTotalTemp - discountValTemp + deliveryValTemp);
                 const isSmallOrder = totalTemp < 5;
                 const paidTemp = parseFloat(amountPaid) || 0;
                 if (paidTemp < 0) return alert("المبلغ المدفوع لا يمكن أن يكون بالسالب");
-                if (paidTemp > totalTemp && !window.confirm(`المبلغ المدفوع (${paidTemp} ج) أكبر من إجمالي الفاتورة (${totalTemp} ج). هل تريد المتابعة؟`)) return;
+                if (paidTemp > totalTemp && !window.confirm(`المبلغ المدفوع (${r2(paidTemp)} ج) أكبر من إجمالي الفاتورة (${r2(totalTemp)} ج). هل تريد المتابعة؟`)) return;
 
                 // منع عمل فاتورة جديدة لو العميل عليه ديون متأخرة (+3 أيام)
                 if (customerName.trim() || customerPhone.trim()) {
@@ -1523,7 +1526,7 @@
                     });
                     if (overdueForCustomer.length > 0) {
                         const debtAmt = overdueForCustomer.reduce((s,o) => s + (o.remaining||0), 0);
-                        return alert(`هذا العميل عليه مديونية بـ ${debtAmt} ج لا يمكن عمل فاتورة جديدة به`);
+                        return alert(`هذا العميل عليه مديونية بـ ${r2(debtAmt)} ج لا يمكن عمل فاتورة جديدة به`);
                     }
                 }
 
@@ -1540,10 +1543,10 @@
                     }
                 }
 
-                const subTotal = cart.reduce((a,b)=>a+(b.currentPrice*b.qty),0);
+                const subTotal = r2(cart.reduce((a,b)=>a+(b.currentPrice*b.qty),0));
                 const discountVal = parseFloat(discount) || 0;
                 const deliveryVal = parseFloat(deliveryFee) || 0;
-                const total = Math.max(0, subTotal - discountVal + deliveryVal); 
+                const total = r2(Math.max(0, subTotal - discountVal + deliveryVal)); 
                 const paid = parseFloat(amountPaid)||0;
 
                 const batch = writeBatch(db);
@@ -1630,14 +1633,14 @@
                 if(!customerName.trim()) return alert("يجب إدخال اسم العميل!");
                 if(!customerPhone.trim()) return alert("يجب إدخال رقم هاتف العميل (واتساب)!");
 
-                const subTotal = cart.reduce((a,b)=>a+(b.currentPrice*b.qty),0);
+                const subTotal = r2(cart.reduce((a,b)=>a+(b.currentPrice*b.qty),0));
                 const discountVal = parseFloat(discount) || 0;
                 const deliveryVal = parseFloat(deliveryFee) || 0;
-                const total = Math.max(0, subTotal - discountVal + deliveryVal); 
+                const total = r2(Math.max(0, subTotal - discountVal + deliveryVal)); 
                 const paid = parseFloat(amountPaid)||0;
-                const currentRemaining = total - paid;
+                const currentRemaining = r2(total - paid);
 
-                const currentItemsStr = cart.map(i=>`• ${i.name} (x${i.qty}) = ${i.qty*i.currentPrice} ج`).join('\n');
+                const currentItemsStr = cart.map(i=>`• ${i.name} (x${i.qty}) = ${r2(i.qty*i.currentPrice)} ج`).join('\n');
                 
                 let msg = '';
 
@@ -1654,37 +1657,37 @@
                     
                     msg = `*كشف حساب وفاتورة استوديو بولا عماد*\nالعميل: ${customerName}\n================\n\n`;
                     msg += `*تفاصيل أوردر اليوم:*\n${currentItemsStr}\n`;
-                    if (deliveryVal > 0) msg += `دليفري: ${deliveryVal} ج\n`;
-                    msg += `الإجمالي: ${total} ج | المدفوع: ${paid} ج | *الباقي: ${currentRemaining} ج*\n\n`;
+                    if (deliveryVal > 0) msg += `دليفري: ${r2(deliveryVal)} ج\n`;
+                    msg += `الإجمالي: ${r2(total)} ج | المدفوع: ${r2(paid)} ج | *الباقي: ${r2(currentRemaining)} ج*\n\n`;
                     
                     if (unpaidOrders.length > 0) {
                         msg += `================\n*الفواتير السابقة المعلقة:*\n\n`;
                         unpaidOrders.forEach((o) => {
                             msg += `*فاتورة (${o.dateString}):*\n`;
                             o.items.forEach(item => {
-                                msg += `- ${item.name} (x${item.qty}) = ${item.qty * item.currentPrice}ج\n`;
+                                msg += `- ${item.name} (x${item.qty}) = ${r2(item.qty * item.currentPrice)}ج\n`;
                             });
-                            msg += `*الباقي من الفاتورة: ${o.remaining} ج*\n\n`;
+                            msg += `*الباقي من الفاتورة: ${r2(o.remaining)} ج*\n\n`;
                         });
                     }
                     
                     const totalDebtIncludingCurrent = previousDebt + currentRemaining;
                     msg += `================\n`;
                     if (previousDebt > 0) {
-                        msg += `*إجمالي المديونيات السابقة:* ${previousDebt} ج\n`;
+                        msg += `*إجمالي المديونيات السابقة:* ${r2(previousDebt)} ج\n`;
                     }
-                    msg += `*إجمالي المديونية الكلية (القديم + الجديد):* ${totalDebtIncludingCurrent} ج\n`;
+                    msg += `*إجمالي المديونية الكلية (القديم + الجديد):* ${r2(totalDebtIncludingCurrent)} ج\n`;
                     
                     if (activeCustomer && (activeCustomer.walletBalance || 0) > 0) {
-                        msg += `*رصيد محفظتك لدينا:* ${activeCustomer.walletBalance} ج\n`;
+                        msg += `*رصيد محفظتك لدينا:* ${r2(activeCustomer.walletBalance)} ج\n`;
                     }
 
                     msg += getCustomerFooter(customerName, customerPhone);
 
                 } else {
                     msg = `*فاتورة استوديو بولا عماد*\nالعميل: ${customerName}\n--------------\n${currentItemsStr}\n--------------\n`;
-                    if (deliveryVal > 0) msg += `دليفري: ${deliveryVal} ج\n`;
-                    msg += `الإجمالي: ${total} ج\nالمدفوع: ${paid} ج\n*الباقي: ${currentRemaining} ج*\n${getCustomerFooter(customerName, customerPhone)}`;
+                    if (deliveryVal > 0) msg += `دليفري: ${r2(deliveryVal)} ج\n`;
+                    msg += `الإجمالي: ${r2(total)} ج\nالمدفوع: ${r2(paid)} ج\n*الباقي: ${r2(currentRemaining)} ج*\n${getCustomerFooter(customerName, customerPhone)}`;
                 }
                 
                 window.open(`https://wa.me/2${customerPhone}?text=${encodeURIComponent(msg)}`, '_blank');
@@ -1750,10 +1753,10 @@
       <tbody>${itemsRows}</tbody>
     </table>
     <div class="totals">
-      ${(order.deliveryFee > 0) ? `<div class="row"><span>دليفري</span><span>${order.deliveryFee} ج</span></div>` : ''}
-      <div class="row"><span>الإجمالي</span><span>${order.total} ج</span></div>
-      <div class="row"><span>المدفوع</span><span>${order.paid} ج</span></div>
-      <div class="row total-final"><span>الباقي</span><span>${order.remaining} ج</span></div>
+      ${(order.deliveryFee > 0) ? `<div class="row"><span>دليفري</span><span>${r2(order.deliveryFee)} ج</span></div>` : ''}
+      <div class="row"><span>الإجمالي</span><span>${r2(order.total)} ج</span></div>
+      <div class="row"><span>المدفوع</span><span>${r2(order.paid)} ج</span></div>
+      <div class="row total-final"><span>الباقي</span><span>${r2(order.remaining)} ج</span></div>
     </div>
     <div class="footer">شكراً لتعاملكم معنا ✨<br>استوديو بولا عماد</div>
   </div>
@@ -1883,7 +1886,7 @@
 
                 const amountToPay = Math.min(totalDebt, currentWallet);
 
-                if(!window.confirm(`سيتم خصم ${amountToPay} ج من محفظة العميل لسداد المديونيات. تأكيد؟`)) return;
+                if(!window.confirm(`سيتم خصم ${r2(amountToPay)} ج من محفظة العميل لسداد المديونيات. تأكيد؟`)) return;
 
                 try {
                     const batch = writeBatch(db);
@@ -1976,9 +1979,9 @@
                     unpaidOrders.forEach((o) => {
                         msg += `*فاتورة بتاريخ (${o.dateString})*\n`;
                         o.items.forEach(item => {
-                            msg += `- ${item.name} (x${item.qty}) = ${item.qty * item.currentPrice}ج\n`;
+                            msg += `- ${item.name} (x${item.qty}) = ${r2(item.qty * item.currentPrice)}ج\n`;
                         });
-                        msg += `الإجمالي: ${o.total}ج | المدفوع: ${o.paid}ج | *الباقي: ${o.remaining}ج*\n\n`;
+                        msg += `الإجمالي: ${r2(o.total)}ج | المدفوع: ${r2(o.paid)}ج | *الباقي: ${r2(o.remaining)}ج*\n\n`;
                     });
                 }
 
@@ -1986,11 +1989,11 @@
 
                 msg += `================\n`;
                 if(totalDebt > 0) {
-                    msg += `*إجمالي المديونية الحالية:* ${totalDebt} ج\n`;
+                    msg += `*إجمالي المديونية الحالية:* ${r2(totalDebt)} ج\n`;
                 }
                 
                 if ((activeCustomer.walletBalance || 0) > 0) {
-                    msg += `*رصيد محفظتك لدينا:* ${activeCustomer.walletBalance} ج\n`;
+                    msg += `*رصيد محفظتك لدينا:* ${r2(activeCustomer.walletBalance)} ج\n`;
                 }
 
                 msg += getCustomerFooter(activeCustomer.name, activeCustomer.phone);
@@ -2064,7 +2067,7 @@
             };
 
             const buildOrderText = (order) => {
-                const itemsStr = (order.items || []).map(i => `• ${i.name} (x${i.qty}) = ${(i.qty * (i.currentPrice || i.price || 0))} ج`).join('\n');
+                const itemsStr = (order.items || []).map(i => `• ${i.name} (x${i.qty}) = ${r2((i.qty * (i.currentPrice || i.price || 0)))} ج`).join('\n');
                 return [
                     'استوديو ومكتب بولا عماد',
                     '========================',
@@ -2185,10 +2188,10 @@
             };
 
             const buildDraftOrderFromCart = () => {
-                const subTotal = cart.reduce((a,b)=>a+(b.currentPrice*b.qty),0);
+                const subTotal = r2(cart.reduce((a,b)=>a+(b.currentPrice*b.qty),0));
                 const discountVal = parseFloat(discount) || 0;
                 const deliveryVal = parseFloat(deliveryFee) || 0;
-                const total = Math.max(0, subTotal - discountVal + deliveryVal);
+                const total = r2(Math.max(0, subTotal - discountVal + deliveryVal));
                 const paid = parseFloat(amountPaid)||0;
                 return {
                     customerName: customerName.trim() || 'عميل',
@@ -2344,8 +2347,8 @@
                 if (isNaN(paid) || paid < 0) return alert("المبلغ غير صحيح");
                 const oldPaid = parseFloat(editingOrder.paid) || 0;
                 const diff = paid - oldPaid;
-                const remaining = editingOrder.total - paid;
-                if (paid > editingOrder.total && !window.confirm(`المبلغ (${paid} ج) أكبر من إجمالي الفاتورة (${editingOrder.total} ج). هل تريد المتابعة؟`)) return;
+                const remaining = r2(editingOrder.total - paid);
+                if (paid > editingOrder.total && !window.confirm(`المبلغ (${r2(paid)} ج) أكبر من إجمالي الفاتورة (${r2(editingOrder.total)} ج). هل تريد المتابعة؟`)) return;
                 try {
                     const batch = writeBatch(db);
                     batch.update(doc(db, 'artifacts', appId, 'public', 'data', 'orders', editingOrder.id), {
@@ -2461,21 +2464,21 @@
                                     <Banknote size={18}/>
                                     <div className="text-xs font-black">
                                         <span className="block text-[9px] text-emerald-500 uppercase">الدرج (اليوم)</span>
-                                        {headerStats.drawer} ج
+                                        {r2(headerStats.drawer)} ج
                                     </div>
                                 </div>
                                 <div className="flex items-center gap-2 px-3 py-1 bg-blue-100/50 text-blue-700 rounded-xl">
                                     <Smartphone size={18}/>
                                     <div className="text-xs font-black">
                                         <span className="block text-[9px] text-blue-500 uppercase">محفظة</span>
-                                        {headerStats.wallet} ج
+                                        {r2(headerStats.wallet)} ج
                                     </div>
                                 </div>
                                 <div className="flex items-center gap-2 px-3 py-1 bg-indigo-100/50 text-indigo-700 rounded-xl">
                                     <TrendingUp size={18}/>
                                     <div className="text-xs font-black">
                                         <span className="block text-[9px] text-indigo-500 uppercase">الإجمالي اليومي</span>
-                                        {headerStats.total} ج
+                                        {r2(headerStats.total)} ج
                                     </div>
                                 </div>
                             </div>
@@ -2530,7 +2533,7 @@
                                     }).slice(0,80).map(o => (
                                         <button key={o.id} onClick={()=>{setWaSelectedOrder(o); setWaFiles([]);}} className={`w-full text-right p-3 rounded-xl border ${waSelectedOrder?.id===o.id ? 'bg-emerald-50 border-emerald-300' : 'bg-slate-50 border-transparent'}`}>
                                             <div className="font-black text-slate-800">{o.customerName || 'بدون اسم'}</div>
-                                            <div className="text-[11px] text-slate-500 font-bold">{o.customerPhone || '—'} • {o.dateString} • {o.total} ج</div>
+                                            <div className="text-[11px] text-slate-500 font-bold">{o.customerPhone || '—'} • {o.dateString} • {r2(o.total)} ج</div>
                                         </button>
                                     ))}
                                 </div>
@@ -2676,7 +2679,7 @@
                                                         </div>
                                                         <div className="text-left">
                                                             <div className="text-[10px] text-slate-400 font-bold">{o.dateString}</div>
-                                                            <div className="text-sm font-black text-amber-700">{o.total} ج</div>
+                                                            <div className="text-sm font-black text-amber-700">{r2(o.total)} ج</div>
                                                         </div>
                                                     </div>
                                                     <div className="text-xs text-slate-600 space-y-0.5 mb-2">
@@ -2685,10 +2688,10 @@
                                                         ))}
                                                     </div>
                                                     <div className="flex flex-wrap gap-2 text-[10px] font-bold text-slate-500">
-                                                        <span>مدفوع: {o.paid} ج</span>
-                                                        <span>باقي: {o.remaining} ج</span>
+                                                        <span>مدفوع: {r2(o.paid)} ج</span>
+                                                        <span>باقي: {r2(o.remaining)} ج</span>
                                                         {o.employeeName && <span>موظف: {o.employeeName}</span>}
-                                                        {o.deliveryFee > 0 && <span>دليفري: {o.deliveryFee} ج</span>}
+                                                        {o.deliveryFee > 0 && <span>دليفري: {r2(o.deliveryFee)} ج</span>}
                                                     </div>
                                                 </div>
                                             ))}
@@ -2763,7 +2766,7 @@
                                         return (
                                             <button key={item.id} onClick={()=> handleItemClick(item)} className="bg-white p-6 rounded-[2rem] border border-slate-100 shadow-sm hover:shadow-md transition text-center relative group">
                                                 <div className="font-black text-slate-800 mb-1">{item.name}</div>
-                                                <div className={`font-black text-xl ${isWholesale ? 'text-amber-600' : 'text-emerald-600'}`}>{price} ج{item.soldByMeter === true ? ' / متر' : ''}</div>
+                                                <div className={`font-black text-xl ${isWholesale ? 'text-amber-600' : 'text-emerald-600'}`}>{r2(price)} ج{item.soldByMeter === true ? ' / متر' : ''}</div>
                                                 {item.isLaser && <Zap size={14} className="absolute top-4 left-4 text-amber-500"/>}
                                                 {item.isPrintingMaterial && <Camera size={14} className="absolute top-4 left-4 text-blue-500"/>}
                                                 {item.isPrintOnDoor && <Printer size={14} className="absolute top-4 left-4 text-cyan-500"/>}
@@ -2787,13 +2790,13 @@
                                     {cart.map((c,idx) => (
                                         <div key={idx} className="flex justify-between text-xs font-bold bg-slate-50 p-3 rounded-xl">
                                             <span className="truncate flex-1">{c.name} <span className="text-emerald-600 font-bold">x{c.qty}</span></span>
-                                            <span>{c.currentPrice * c.qty}ج</span>
+                                            <span>{r2(c.currentPrice * c.qty)}ج</span>
                                             <button onClick={()=>setCart(cart.filter((_,i)=>i!==idx))} className="text-red-500 mr-2"><X size={16}/></button>
                                         </div>
                                     ))}
                                 </div>
                                 <div className="text-3xl font-black text-center mb-6 text-emerald-800 bg-emerald-50 py-4 rounded-2xl">
-                                     {(cart.reduce((a,b)=>a+(b.currentPrice*b.qty),0) - (parseFloat(discount)||0) + (parseFloat(deliveryFee)||0)).toFixed(0)} ج
+                                     {(r2(cart.reduce((a,b)=>a+(b.currentPrice*b.qty),0)) - (parseFloat(discount)||0) + (parseFloat(deliveryFee)||0)).toFixed(0)} ج
                                 </div>
                                 <div className="space-y-2">
                                      <div className="flex items-center gap-2 bg-slate-100 rounded-xl p-1 mb-2">
@@ -2833,7 +2836,7 @@
                                         <button onClick={()=>setPaymentMethod('wallet')} className={`flex-1 py-2 rounded-lg text-xs font-black ${paymentMethod==='wallet'?'bg-blue-600 text-white shadow-md':'bg-slate-100'}`}>محفظة</button>
                                      </div>
                                      {(() => {
-                                        const currentTotal = Math.max(0, cart.reduce((a,b)=>a+(b.currentPrice*b.qty),0) - (parseFloat(discount)||0) + (parseFloat(deliveryFee)||0));
+                                        const currentTotal = r2(Math.max(0, r2(cart.reduce((a,b)=>a+(b.currentPrice*b.qty),0)) - (parseFloat(discount)||0) + (parseFloat(deliveryFee)||0)));
                                         const isSmall = currentTotal < 5;
                                         const canSave = isWhatsAppSent || (isSmall && !customerPhone.trim());
                                         return (
@@ -2891,14 +2894,14 @@
                             </div>
 
                             <div className="bg-red-50 p-6 rounded-[2.5rem] border border-red-100">
-                                <h3 className="font-black text-red-800 mb-4 flex items-center gap-2"><MinusCircle size={18}/> مصروفات اليوم ({expenses.filter(e=>e.dateString===today).reduce((s,e)=>s+e.amount,0)} ج)</h3>
+                                <h3 className="font-black text-red-800 mb-4 flex items-center gap-2"><MinusCircle size={18}/> مصروفات اليوم ({r2(expenses.filter(e=>e.dateString===today).reduce((s,e)=>s+e.amount,0))} ج)</h3>
                                 <div className="space-y-2 max-h-32 overflow-y-auto scrollbar-hide">
                                     {expenses.filter(e=>e.dateString===today).length === 0 ? <p className="text-center text-red-300 font-black text-xs">لا توجد مصاريف اليوم</p> : 
                                      expenses.filter(e=>e.dateString===today).map(e=>(
                                         <div key={e.id} className="flex justify-between items-center bg-white p-3 rounded-xl shadow-sm group">
                                             <div>
                                                 <div className="font-bold text-slate-700 text-xs">{e.description}</div>
-                                                <div className="font-black text-red-600 text-xs">{e.amount} ج</div>
+                                                <div className="font-black text-red-600 text-xs">{r2(e.amount)} ج</div>
                                             </div>
                                             <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition">
                                                 <button onClick={()=>setEditingExpense(e)} className="p-2 bg-blue-50 text-blue-500 rounded-lg hover:bg-blue-100"><Edit size={12}/></button>
@@ -2933,10 +2936,10 @@
                                             <button onClick={()=>{setDeleteConfirmModal(order); setDeleteStep(1); setDeleteReason(''); setDeleteEmployee('');}} className="text-slate-200 group-hover:text-red-500 transition"><Trash2 size={16}/></button>
                                         </div>
                                         <div className="space-y-1 mb-6 text-[11px] font-bold text-slate-500 bg-slate-50 p-3 rounded-2xl border border-slate-100 max-h-24 overflow-y-auto">
-                                            {order.items.map((i,idx)=><div key={idx} className="flex justify-between"><span>• {i.name} {i.isPrinting ? `(${i.qty}م²)` : `(x${i.qty})`}</span><span>{Math.ceil(i.qty*i.currentPrice)} ج</span></div>)}
+                                            {order.items.map((i,idx)=><div key={idx} className="flex justify-between"><span>• {i.name} {i.isPrinting ? `(${i.qty}م²)` : `(x${i.qty})`}</span><span>{r2(Math.ceil(i.qty*i.currentPrice))} ج</span></div>)}
                                         </div>
                                         <div className="flex justify-between text-sm font-black mb-4">
-                                            <div className="text-emerald-700">الإجمالي: {order.total}</div>
+                                            <div className="text-emerald-700">الإجمالي: {r2(order.total)}</div>
                                             <div className={order.remaining > 0 ? "text-red-600" : "text-slate-500"}>الباقي: {order.remaining}</div>
                                         </div>
                                         
@@ -2958,8 +2961,8 @@
                                                 <FolderPlus size={14}/> إنشاء فولدر
                                             </button>
                                             <button onClick={() => {
-                                                const itemsStr = order.items.map(i=>`• ${i.name} (x${i.qty}) = ${i.qty*i.currentPrice} ج`).join('\n');
-                                                const msg = `*فاتورة استوديو بولا عماد*\nالعميل: ${order.customerName}\n--------------\n${itemsStr}\n--------------\nالإجمالي: ${order.total} ج\nالمدفوع: ${order.paid} ج\n*الباقي: ${order.remaining} ج*\n${getCustomerFooter(order.customerName, order.customerPhone)}`;
+                                                const itemsStr = order.items.map(i=>`• ${i.name} (x${i.qty}) = ${r2(i.qty*i.currentPrice)} ج`).join('\n');
+                                                const msg = `*فاتورة استوديو بولا عماد*\nالعميل: ${order.customerName}\n--------------\n${itemsStr}\n--------------\nالإجمالي: ${r2(order.total)} ج\nالمدفوع: ${r2(order.paid)} ج\n*الباقي: ${r2(order.remaining)} ج*\n${getCustomerFooter(order.customerName, order.customerPhone)}`;
                                                 window.open(`https://wa.me/2${order.customerPhone || ''}?text=${encodeURIComponent(msg)}`, '_blank');
                                             }} className="bg-emerald-50 text-emerald-600 py-3 rounded-xl font-black text-xs flex items-center justify-center gap-2 border border-emerald-100">
                                                 <Send size={14}/> واتساب
@@ -3102,8 +3105,8 @@
                                         <div>
                                             <div className="text-sm font-black text-slate-700 pr-2 border-r-4 border-slate-200 mb-2">{item.name}{item.isTemporary && item.tempEmployee ? ` (${item.tempEmployee})` : ''}{item.isTemporary ? <span className="mr-2 text-[10px] bg-amber-100 text-amber-700 px-2 py-0.5 rounded-lg">مؤقت</span> : null}</div>
                                             <div className="flex gap-2 text-xs font-bold mb-4">
-                                                <span className="bg-emerald-50 text-emerald-700 px-2 py-1 rounded">ق: {item.price}ج</span>
-                                                <span className="bg-amber-50 text-amber-700 px-2 py-1 rounded">ج: {item.wholesalePrice||item.price}ج</span>
+                                                <span className="bg-emerald-50 text-emerald-700 px-2 py-1 rounded">ق: {r2(item.price)}ج</span>
+                                                <span className="bg-amber-50 text-amber-700 px-2 py-1 rounded">ج: {r2(item.wholesalePrice||item.price)}ج</span>
                                             </div>
                                         </div>
 
@@ -3256,8 +3259,8 @@
                                             <div className="font-black text-xl text-slate-800 mb-1">{c.name}</div>
                                             <div className="text-xs text-slate-400 font-bold mb-4">{c.phone}</div>
                                             <div className="bg-slate-50 p-4 rounded-2xl mb-4 space-y-2 flex-1">
-                                                <div className="flex justify-between text-xs font-bold text-slate-500"><span>إجمالي المسحوبات:</span><span>{total} ج</span></div>
-                                                <div className={`flex justify-between text-sm font-black border-t border-slate-200 pt-2 ${debt > 0 ? 'text-red-600' : 'text-slate-600'}`}><span>المديونية الحالية:</span><span>{debt} ج</span></div>
+                                                <div className="flex justify-between text-xs font-bold text-slate-500"><span>إجمالي المسحوبات:</span><span>{r2(total)} ج</span></div>
+                                                <div className={`flex justify-between text-sm font-black border-t border-slate-200 pt-2 ${debt > 0 ? 'text-red-600' : 'text-slate-600'}`}><span>المديونية الحالية:</span><span>{r2(debt)} ج</span></div>
                                             </div>
                                             <button onClick={() => setCustomerDetailsModal(c)} className="w-full bg-slate-900 text-white py-3 rounded-xl font-black text-sm flex items-center justify-center gap-2 hover:bg-black transition shadow-lg mt-auto">
                                                 <FileText size={16}/> عرض تفاصيل وكشف حساب العميل
@@ -3329,11 +3332,11 @@
                                             <div className="flex gap-4">
                                                 <div className="bg-red-50 border-2 border-red-100 p-4 rounded-[2rem] flex-1 flex flex-col items-center justify-center text-center">
                                                     <div className="text-xs font-black text-red-500 mb-1">إجمالي المديونية</div>
-                                                    <div className="text-2xl font-black text-red-700">{totalDebt} ج</div>
+                                                    <div className="text-2xl font-black text-red-700">{r2(totalDebt)} ج</div>
                                                 </div>
                                                 <div className="bg-indigo-50 border-2 border-indigo-100 p-4 rounded-[2rem] flex-1 flex flex-col items-center justify-center text-center">
                                                     <div className="text-xs font-black text-indigo-500 mb-1">رصيد المحفظة</div>
-                                                    <div className="text-2xl font-black text-indigo-700">{walletBalance} ج</div>
+                                                    <div className="text-2xl font-black text-indigo-700">{r2(walletBalance)} ج</div>
                                                     {walletBalance > 0 && (
                                                         <button 
                                                             onClick={() => { setWithdrawAmount(''); setShowWithdrawModal(true); }}
@@ -3378,8 +3381,8 @@
                                                             <div>
                                                                 <div className="text-xs font-black text-slate-500 mb-1">{order.dateString}</div>
                                                                 <div className="flex items-center gap-3 font-black text-sm">
-                                                                    <span className="text-slate-700">إجمالي: {order.total} ج</span>
-                                                                    <span className="text-red-600">باقي: {order.remaining} ج</span>
+                                                                    <span className="text-slate-700">إجمالي: {r2(order.total)} ج</span>
+                                                                    <span className="text-red-600">باقي: {r2(order.remaining)} ج</span>
                                                                 </div>
                                                             </div>
                                                             <div className="flex gap-1 mt-3 md:mt-0 w-full md:w-auto flex-wrap justify-end">
@@ -3394,7 +3397,7 @@
                                                             {order.items.map((i, idx) => (
                                                                 <div key={idx} className="flex justify-between border-b border-slate-100 pb-1">
                                                                     <span className="truncate pr-2 border-r-2 border-indigo-200">• {i.name} (x{i.qty})</span>
-                                                                    <span>{i.qty * i.currentPrice} ج</span>
+                                                                    <span>{r2(i.qty * i.currentPrice)} ج</span>
                                                                 </div>
                                                             ))}
                                                         </div>
@@ -3433,7 +3436,7 @@
                                 <p className="text-slate-400 text-sm font-bold mb-6 leading-relaxed">
                                     {singleOrderPayConfirm.method === 'customer_wallet' 
                                         ? `سيتم خصم ${Math.min(singleOrderPayConfirm.order.remaining, (customers.find(c => c.id === customerDetailsModal?.id) || customerDetailsModal)?.walletBalance || 0)} ج من محفظة العميل لسداد هذه الفاتورة. تأكيد؟`
-                                        : `سيتم تسديد مبلغ ${singleOrderPayConfirm.order.remaining} ج عن طريق ${singleOrderPayConfirm.method === 'cash' ? 'الدرج' : 'محفظة فودافون'}. تأكيد؟`
+                                        : `سيتم تسديد مبلغ ${r2(singleOrderPayConfirm.order.remaining)} ج عن طريق ${singleOrderPayConfirm.method === 'cash' ? 'الدرج' : 'محفظة فودافون'}. تأكيد؟`
                                     }
                                 </p>
                                 <div className="flex gap-2">
@@ -3453,7 +3456,7 @@
                                 </div>
                                 <h3 className="text-xl font-black mb-2 text-white">سحب العميل</h3>
                                 <p className="text-slate-400 text-sm font-bold mb-4">
-                                    رصيد المحفظة الحالي: {(customers.find(c => c.id === customerDetailsModal.id) || customerDetailsModal).walletBalance || 0} ج
+                                    رصيد المحفظة الحالي: {r2((customers.find(c => c.id === customerDetailsModal.id) || customerDetailsModal).walletBalance || 0)} ج
                                 </p>
                                 <input 
                                     type="number" 
@@ -3509,7 +3512,7 @@
                                                     <div>
                                                         <div className="font-black text-slate-800">{c.name || 'بدون اسم'}</div>
                                                         <div className="text-xs text-slate-400 font-bold">{c.phone}</div>
-                                                        <div className="text-xs text-indigo-500 font-bold mt-1">{c.count} عملية | إجمالي {c.total} ج</div>
+                                                        <div className="text-xs text-indigo-500 font-bold mt-1">{c.count} عملية | إجمالي {r2(c.total)} ج</div>
                                                     </div>
                                                 </div>
                                                 <button 
@@ -3580,14 +3583,14 @@
                                                         <div className="font-black text-lg text-slate-800">{order.customerName}</div>
                                                         <div className="text-xs font-bold text-slate-500 mb-2"><Smartphone size={12} className="inline mr-1"/>{order.customerPhone || 'بدون رقم'}</div>
                                                         <div className="bg-red-50 text-red-600 px-3 py-1 rounded-lg text-sm font-black inline-block">
-                                                            الباقي: {order.remaining} ج
+                                                            الباقي: {r2(order.remaining)} ج
                                                         </div>
                                                         <div className="text-[10px] text-slate-400 font-bold mt-2">متأخر منذ {diffDays} أيام ({order.dateString})</div>
                                                     </div>
                                                     
                                                     <button onClick={() => {
-                                                        const itemsStr = order.items.map(i=>`• ${i.name} (x${i.qty}) = ${i.qty*i.currentPrice} ج`).join('\n');
-                                                        const msg = `*استوديو بولا عماد*\nأهلاً بك أ. ${order.customerName}\nبرجاء التفضل باستلام الأوردر الخاص بك وتسديد المديونية في أقرب وقت.\n\n*تفاصيل الأوردر:*\n${itemsStr}\n\n*المبلغ المتبقي لحساب الاستوديو:* ${order.remaining} ج\n${getCustomerFooter(order.customerName, order.customerPhone)}`;
+                                                        const itemsStr = order.items.map(i=>`• ${i.name} (x${i.qty}) = ${r2(i.qty*i.currentPrice)} ج`).join('\n');
+                                                        const msg = `*استوديو بولا عماد*\nأهلاً بك أ. ${order.customerName}\nبرجاء التفضل باستلام الأوردر الخاص بك وتسديد المديونية في أقرب وقت.\n\n*تفاصيل الأوردر:*\n${itemsStr}\n\n*المبلغ المتبقي لحساب الاستوديو:* ${r2(order.remaining)} ج\n${getCustomerFooter(order.customerName, order.customerPhone)}`;
                                                         window.open(`https://wa.me/2${order.customerPhone || ''}?text=${encodeURIComponent(msg)}`, '_blank');
                                                     }} className="w-full md:w-auto bg-emerald-500 hover:bg-emerald-600 text-white px-6 py-3 rounded-xl font-black text-sm flex items-center justify-center gap-2 transition shadow-md whitespace-nowrap">
                                                         <Send size={18}/> إرسال رسالة تذكير
@@ -3692,7 +3695,7 @@
                                                         </div>
                                                         <div className="space-y-1 text-xs">
                                                             <div className="flex justify-between text-slate-500 font-bold"><span>إجمالي الطلبات:</span><span>{salesCount}</span></div>
-                                                            <div className="flex justify-between text-slate-500 font-bold"><span>مبيعات (مسددة):</span><span>{totalSalesForComm} ج</span></div>
+                                                            <div className="flex justify-between text-slate-500 font-bold"><span>مبيعات (مسددة):</span><span>{r2(totalSalesForComm)} ج</span></div>
                                                             <div className="flex justify-between text-indigo-600 font-black border-t border-slate-100 pt-1 mt-1"><span>العمولة المستحقة:</span><span>{commission.toFixed(1)} ج</span></div>
                                                         </div>
                                                     </div>
@@ -3716,7 +3719,7 @@
                                                         {log.employeeName && <div className="text-[10px] text-slate-500 font-bold mt-1">أنشأ الفاتورة: {log.employeeName}</div>}
                                                         {log.deletedByEmployee && <div className="text-[10px] text-red-600 font-black mt-1">حذف بواسطة: {log.deletedByEmployee}</div>}
                                                     </div>
-                                                    <div className="text-sm font-bold text-red-600">القيمة: {log.total} ج</div>
+                                                    <div className="text-sm font-bold text-red-600">القيمة: {r2(log.total)} ج</div>
                                                     <div className="bg-red-100 px-3 py-1 rounded-lg text-xs font-black text-red-700 flex items-center gap-1">
                                                         <ClipboardList size={12}/> {log.reason}
                                                     </div>
@@ -3798,15 +3801,15 @@
                                                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                                                     <div className="p-6 bg-emerald-50 rounded-[2rem] border border-emerald-100 text-center">
                                                         <div className="text-xs text-emerald-600 font-black mb-2 uppercase">دخل سنة {reportYear}</div>
-                                                        <div className="text-3xl font-black text-emerald-800">{totalInc} ج</div>
+                                                        <div className="text-3xl font-black text-emerald-800">{r2(totalInc)} ج</div>
                                                     </div>
                                                     <div className="p-6 bg-red-50 rounded-[2rem] border border-red-100 text-center">
                                                         <div className="text-xs text-red-600 font-black mb-2 uppercase">مصاريف سنة {reportYear}</div>
-                                                        <div className="text-3xl font-black text-red-800">{totalExp} ج</div>
+                                                        <div className="text-3xl font-black text-red-800">{r2(totalExp)} ج</div>
                                                     </div>
                                                     <div className="p-6 bg-slate-100 rounded-[2rem] border border-slate-200 text-center">
                                                         <div className="text-xs text-slate-500 font-black mb-2 uppercase">صافي ربح السنة</div>
-                                                        <div className="text-3xl font-black text-slate-800">{totalInc - totalExp} ج</div>
+                                                        <div className="text-3xl font-black text-slate-800">{r2(totalInc - totalExp)} ج</div>
                                                     </div>
                                                 </div>
 
@@ -3832,7 +3835,7 @@
                                                                 <div 
                                                                     className={`w-full rounded-t-lg transition-all ${m.mInc > 0 ? 'bg-emerald-500 hover:bg-emerald-600' : 'bg-slate-200'}`}
                                                                     style={{height: `${Math.max(4, (m.mInc / maxInc) * 100)}%`}}
-                                                                    title={`${m.monthName}: ${m.mInc} ج`}
+                                                                    title={`${m.monthName}: ${r2(m.mInc)} ج`}
                                                                 />
                                                                 <div className="text-[9px] font-bold text-slate-500">{m.monthName}</div>
                                                             </div>
@@ -3869,7 +3872,7 @@
                                                                         <div className="font-black text-lg text-slate-700">{monthName}</div>
                                                                     </div>
                                                                     <div className="text-left">
-                                                                        <div className={`text-xl font-black ${mNet >= 0 ? 'text-emerald-600' : 'text-red-500'}`}>{mNet} ج</div>
+                                                                        <div className={`text-xl font-black ${mNet >= 0 ? 'text-emerald-600' : 'text-red-500'}`}>{r2(mNet)} ج</div>
                                                                         <div className="text-[10px] text-slate-400 font-bold">د: {mInc} | ص: {mExp}</div>
                                                                     </div>
                                                                 </div>
@@ -3908,9 +3911,9 @@
                                                                                             className={`p-3 rounded-2xl text-center border cursor-pointer transition relative bg-slate-50 border-slate-100 hover:border-emerald-200`}
                                                                                         >
                                                                                             <div className={`text-[10px] font-black mb-1 text-slate-400`}>{date.split('-')[2]} / {date.split('-')[1]}</div>
-                                                                                            <div className="text-[11px] font-black text-emerald-600">درج: {drawer} ج</div>
-                                                                                            <div className="text-[11px] font-black text-blue-600">محفظة: {wallet} ج</div>
-                                                                                            <div className={`border-t mt-2 pt-1 text-xs font-black border-slate-200 ${dayNet>=0?'text-slate-800':'text-red-600'}`}>{dayNet} ج</div>
+                                                                                            <div className="text-[11px] font-black text-emerald-600">درج: {r2(drawer)} ج</div>
+                                                                                            <div className="text-[11px] font-black text-blue-600">محفظة: {r2(wallet)} ج</div>
+                                                                                            <div className={`border-t mt-2 pt-1 text-xs font-black border-slate-200 ${dayNet>=0?'text-slate-800':'text-red-600'}`}>{r2(dayNet)} ج</div>
                                                                                         </div>
                                                                                     );
                                                                                 })}
@@ -4184,7 +4187,7 @@
                                 </div>
                                 <h3 className="text-xl font-black mb-2 text-white">تأكيد السداد</h3>
                                 <p className="text-slate-400 text-sm font-bold mb-6">
-                                    هل أنت متأكد من استلام باقي المبلغ ({payConfirmModal.remaining} ج) وتصفير مديونية العميل؟
+                                    هل أنت متأكد من استلام باقي المبلغ ({r2(payConfirmModal.remaining)} ج) وتصفير مديونية العميل؟
                                 </p>
                                 <div className="flex gap-2">
                                     <button onClick={() => executeQuickPay('cash')} className="flex-1 bg-emerald-600 hover:bg-emerald-700 py-3 rounded-xl font-black transition text-white">نقدي (درج)</button>
@@ -4411,7 +4414,7 @@
                                             <div key={i} className="mb-6">
                                                 <div className="flex justify-between items-center bg-orange-50 p-4 rounded-2xl mb-2 sticky top-0 z-10">
                                                     <span className="font-black text-orange-800">شهر {monthName}</span>
-                                                    <span className="font-black text-red-600 bg-white px-3 py-1 rounded-lg shadow-sm">إجمالي: {monthTotal} ج</span>
+                                                    <span className="font-black text-red-600 bg-white px-3 py-1 rounded-lg shadow-sm">إجمالي: {r2(monthTotal)} ج</span>
                                                 </div>
                                                 <div className="space-y-2">
                                                     {monthExpenses.map(exp => (
@@ -4420,7 +4423,7 @@
                                                                 <div className="text-xs text-slate-400 font-bold mb-1">{exp.dateString}</div>
                                                                 <div className="text-sm font-black text-slate-700">{exp.description}</div>
                                                             </div>
-                                                            <div className="text-red-500 font-black">{exp.amount} ج</div>
+                                                            <div className="text-red-500 font-black">{r2(exp.amount)} ج</div>
                                                         </div>
                                                     ))}
                                                 </div>
@@ -4496,7 +4499,7 @@
                                 <h3 className="font-black text-center mb-6 text-xl">تعديل المبلغ المدفوع</h3>
                                 <div className="bg-slate-50 p-4 rounded-2xl mb-6 text-center">
                                     <div className="text-xs text-slate-400 font-bold mb-1">إجمالي الفاتورة</div>
-                                    <div className="text-2xl font-black text-slate-800">{editingOrder.total} ج</div>
+                                    <div className="text-2xl font-black text-slate-800">{r2(editingOrder.total)} ج</div>
                                 </div>
                                 <label className="text-xs font-black text-slate-500 mb-2 block mr-2">المبلغ المدفوع الحالي:</label>
                                 <input className="w-full p-4 bg-slate-100 rounded-2xl mb-4 text-center font-black text-xl border-2 border-transparent focus:border-blue-500 outline-none" type="number" value={editAmount} onChange={e=>setEditAmount(e.target.value)}/>
